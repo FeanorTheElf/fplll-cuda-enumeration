@@ -88,7 +88,7 @@ void test_fplll_like() {
     }
   };
   std::function<extenum_cb_process_sol> process_sol = [](double norm_square, double* x)-> double { return norm_square; };
-  fplll_cuda_enumerate_fn(total_dim, maxdist, set_config, process_sol, nullptr, false, false);
+  fplll_cuda_enum(total_dim, maxdist, set_config, process_sol, nullptr, false, false);
 }
 
 int main()

@@ -170,12 +170,19 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
   } else if (findsubsols) {
     throw "Unsupported operation: findsubsols == true";
   }
+
   std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> result = {};
   PinnedPtr<enumf> mu = allocatePinnedMemory<enumf>(dim * dim);
   PinnedPtr<enumf> rdiag = allocatePinnedMemory<enumf>(dim);
+  std::unique_ptr<enumf[]> pruning(new enumf[dim]);
   enumf radius = std::sqrt(maxdist);
 
-  cbfunc(mu.get(), dim, true, rdiag.get(), nullptr);
+  cbfunc(mu.get(), dim, true, rdiag.get(), pruning.get());
+
+  // functions in this library require 1 on the diagonal, not zero
+  for (unsigned int i = 0; i < dim; ++i) {
+    mu.get()[i * dim + i] = 1;
+  }
 
   cuenum::CudaEnumOpts opts = cuenum::default_opts;
   

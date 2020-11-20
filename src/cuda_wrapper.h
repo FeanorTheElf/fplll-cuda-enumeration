@@ -72,4 +72,8 @@ create_start_point_array(size_t start_point_count, size_t start_point_dim,
 
 }  // namespace cuenum
 
+std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int dim, enumf maxdist, std::function<extenum_cb_set_config> cbfunc,
+  std::function<extenum_cb_process_sol> cbsol, std::function<extenum_cb_process_subsol> cbsubsol,
+  bool dual, bool findsubsols);
+  
 #endif

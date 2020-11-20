@@ -1,6 +1,11 @@
 #ifndef FPLLL_CUDA_ENUM
 #define FPLLL_CUDA_ENUM
 
+/**
+ * Adapter that wraps the heavily templated cuda enumeration functionality
+ * and provides an easily usable interface, as well as one compatible with fplll.
+ */
+
 #include <utility>
 #include <type_traits>
 #include <functional>

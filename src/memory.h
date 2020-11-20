@@ -1,6 +1,11 @@
 #ifndef FPLLL_CUDA_MEMORY_H
 #define FPLLL_CUDA_MEMORY_H
 
+/**
+ * This file contains typedefs for unique pointers to the most
+ * often needed cuda resources
+ */
+
 #include "cuda_runtime.h"
 #include <memory>
 #include "cuda_check.h"

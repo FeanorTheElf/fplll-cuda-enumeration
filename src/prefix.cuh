@@ -1,6 +1,11 @@
 #ifndef FPLLL_PREFIX_CUH
 #define FPLLL_PREFIX_CUH
 
+/**
+ * This file contains functions for prefix counting on different cooperation
+ * levels, which is required for stream compactification
+ */
+
 #include "cuda_runtime.h"
 #include "cooperative_groups.h"
 #include <assert.h>

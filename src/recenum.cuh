@@ -1,6 +1,12 @@
 #ifndef FPLLL_RECENUM_CUH
 #define FPLLL_RECENUM_CUH
 
+/**
+ * This file contains a recursive enumeration algorithm (similar to the base enumeration in fplll),
+ * that may be called from the device and is extremely fast, but may lead to much thread divergence,
+ * if used for a many dimensions
+ */
+
 #include "cuda_runtime.h"
 #include "types.cuh"
 

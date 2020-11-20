@@ -1,6 +1,11 @@
 #ifndef FPLLL_STREAMING_CUH
 #define FPLLL_STREAMING_CUH
 
+/**
+ * This file defines the queue functionality, encapsulated by two endpoints, that is necessary to 
+ * stream solution points from the device to the host, to be processed by the evaluator
+ */
+
 #include "cooperative_groups.h"
 #include "cuda_runtime.h"
 #include <assert.h>

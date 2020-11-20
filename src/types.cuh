@@ -1,6 +1,10 @@
 #ifndef FPLLL_TYPES_CUH
 #define FPLLL_TYPES_CUH
 
+/**
+ * Defines the basic types used during the enumeration
+ */
+
 #include "cuda_runtime.h"
 #include "atomic.h"
 

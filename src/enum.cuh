@@ -1,6 +1,10 @@
 #ifndef FPLLL_ENUM_CUH
 #define FPLLL_ENUM_CUH
 
+/**
+ * This file contains the enumeration routine itself
+ */
+
 #include "cooperative_groups.h"
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"

@@ -1,4 +1,10 @@
 #pragma once
+
+/**
+ * Contains prototyped functionality that is currently used for running everything,
+ * but will hopefully soon be replaced
+ */
+
 #include <iostream>
 #include <functional>
 #include <cmath>

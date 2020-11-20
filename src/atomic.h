@@ -1,6 +1,19 @@
 #ifndef FPLLL_ATOMIC_CUH
 #define FPLLL_ATOMIC_CUH
 
+/**
+ * Defines utility functions performing atomic operations.
+ * The functionality differs from the standard atomic operations in two ways:
+ * 
+ * - Some functions are warp-aggregated (notably aggregated_atomic_inc), which
+ *   improves performance. However, watch out that coalesced threads in a warp have to
+ *   call the function for the same address 
+ * 
+ * - The functions are also callable from the host, in which case they are NOT atomic,
+ *   but still perform the corresponding operation. Helps if you want to execute the code
+ *   single-threaded on the host for debugging.
+ */
+
 #include <assert.h>
 #include <atomic>
 

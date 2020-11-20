@@ -198,4 +198,4 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enumerate(const i
   return result;
 }
 
-const extenum_fc_enumerate* fplll_enumerate_fn = fplll_cuda_enumerate;
+const extenum_fc_enumerate* fplll_cuda_enumerate_fn = fplll_cuda_enumerate;

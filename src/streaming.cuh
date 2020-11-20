@@ -50,17 +50,17 @@ public:
     return ((real_size - 1) / sizeof(enumf) + 1) * sizeof(enumf);
   }
 
-  __device__ __host__ inline void operator()(enumi x, unsigned int coordinate, bool done, enumf norm_square,
-                                             uint32_t *enum_bound_location)
+  __device__ __host__ inline void operator()(enumi x, unsigned int coordinate, enumf norm_square,
+                                             unsigned int point_dimension, uint32_t *enum_bound_location)
   {
     if (coordinate == 0) {
       point_index = aggregated_atomic_inc(write_to_index) % buffer_size;
       result_squared_norms[point_index] = norm_square;
     }
  
-    result_buffer[point_index + coordinate * buffer_size] = x;
+    result_buffer[point_index * point_dimension + coordinate] = x;
  
-    if (done) {
+    if (coordinate == point_dimension - 1) {
       threadfence_system();
       atomic_add(&has_written_round[point_index], 1);
     }
@@ -141,9 +141,9 @@ public:
                 } else if (last_written_count + 1 == new_written_count) {
                     enumf norm_square = static_cast<enumf*>(evaluator_memory(i))[j];
                     enumi* points = static_cast<enumi*>(evaluator_memory(i) + (sizeof(enumf) + sizeof(unsigned int)) * buffer_size);
-                    enumi* x = /* TODO: extract the correct point */ points;
-                    enumf new_enum_bound = callback(norm_square, x);
-                    new_enumeration_bound = std::min<float>(new_enum_bound, new_enumeration_bound);
+                    enumi* x = &points[j * point_dimension];
+                    enumf evaluator_enum_bound = callback(norm_square, x);
+                    new_enumeration_bound = std::min<float>(evaluator_enum_bound, new_enumeration_bound);
                 } else {
                     throw "buffer not big enough to hold all solution points found between two queries";
                 }

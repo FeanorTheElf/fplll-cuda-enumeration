@@ -376,9 +376,10 @@ ProcessLeafCallback<eval_sol_fn, levels, dimensions_per_level, max_nodes_per_lev
   {
     return;
   }
+  const unsigned int total_point_dimension = dimensions_per_level * levels + start_point_dim;
   for (unsigned int i = 0; i < dimensions_per_level; ++i)
   {
-    process_sol(x[i], i, false, squared_norm, radius_squared_location);
+    process_sol(x[i], i, squared_norm, total_point_dimension, radius_squared_location);
   }
   unsigned int index = parent_index;
   for (unsigned int j = levels - 1; j > 0; --j)
@@ -386,7 +387,7 @@ ProcessLeafCallback<eval_sol_fn, levels, dimensions_per_level, max_nodes_per_lev
     for (unsigned int i = 0; i < dimensions_per_level; ++i)
     {
       process_sol(buffer.get_coefficient(j, index, i), i + (levels - j) * dimensions_per_level,
-                  false, squared_norm, radius_squared_location);
+                  squared_norm, total_point_dimension, radius_squared_location);
     }
     index = buffer.get_parent_index(j, index);
   }
@@ -394,7 +395,7 @@ ProcessLeafCallback<eval_sol_fn, levels, dimensions_per_level, max_nodes_per_lev
   for (unsigned int i = 0; i < start_point_dim; ++i)
   {
     process_sol(start_points[index * start_point_dim + i], i + levels * dimensions_per_level,
-                i + 1 == start_point_dim, squared_norm, radius_squared_location);
+                squared_norm, total_point_dimension, radius_squared_location);
   }
 }
 

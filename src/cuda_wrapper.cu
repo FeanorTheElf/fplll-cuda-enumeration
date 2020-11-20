@@ -161,7 +161,7 @@ PinnedPtr<enumi> enumerate_start_points(const int dim, const int start_dims, dou
   return cuenum::create_start_point_array(start_points.size(), start_dims, start_points.begin(), start_points.end());
 }
 
-std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enumerate(const int dim, enumf maxdist, std::function<extenum_cb_set_config> cbfunc,
+std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int dim, enumf maxdist, std::function<extenum_cb_set_config> cbfunc,
   std::function<extenum_cb_process_sol> cbsol, std::function<extenum_cb_process_subsol> cbsubsol,
   bool dual, bool findsubsols) 
 {
@@ -198,4 +198,4 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enumerate(const i
   return result;
 }
 
-const extenum_fc_enumerate* fplll_cuda_enumerate_fn = fplll_cuda_enumerate;
+constexpr extenum_fc_enumerate* __check_function_interface = fplll_cuda_enum;

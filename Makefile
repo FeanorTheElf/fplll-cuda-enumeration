@@ -11,4 +11,4 @@ all:
 	$(NVCC) -ccbin $(CXX) -D NDEBUG -O3 src/test.cpp src/testdata.cpp src/cuda_wrapper.cu
 
 lib:
-	$(NVCC) -ccbin $(CXX) --shared --compiler-options -fPIC -D NDEBUG -O3 src/cuda_wrapper.cu -o libcudaenum.so
+	$(NVCC) -ccbin $(CXX) --shared --compiler-options -fPIC -D NDEBUG -O3 src/cuda_wrapper.cu -o fplll_cuda_enum.so

@@ -72,6 +72,4 @@ create_start_point_array(size_t start_point_count, size_t start_point_dim,
 
 }  // namespace cuenum
 
-extern const extenum_fc_enumerate* fplll_cuda_enumerate_fn;
-
 #endif

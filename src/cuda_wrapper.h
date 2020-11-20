@@ -5,10 +5,7 @@
  * Adapter that wraps the heavily templated cuda enumeration functionality
  * and provides an easily usable interface, as well as one compatible with fplll.
  */
-
-#include <utility>
-#include <type_traits>
-#include <functional>
+#include "api.h"
 #include "memory.h"
 
 namespace cuenum
@@ -75,15 +72,6 @@ create_start_point_array(size_t start_point_count, size_t start_point_dim,
 
 }  // namespace cuenum
 
-constexpr size_t cudaenum_return_array_size = 256;
-
-typedef void(extenum_cb_set_config)(double *mu, size_t mudim, bool mutranspose, double *rdiag,
-                                    double *pruning);
-typedef double(extenum_cb_process_sol)(double dist, double *sol);
-typedef void(extenum_cb_process_subsol)(double dist, double *subsol, int offset);
-
-std::array<uint64_t, cudaenum_return_array_size> ext_cuda_enumerate(const int dim, double maxdist, std::function<extenum_cb_set_config> cbfunc,
-    std::function<extenum_cb_process_sol> cbsol, std::function<extenum_cb_process_subsol> cbsubsol,
-    bool dual = false, bool findsubsols = false);
+extern const extenum_fc_enumerate* fplll_enumerate_fn;
 
 #endif

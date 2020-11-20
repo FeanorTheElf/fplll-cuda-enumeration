@@ -161,7 +161,7 @@ PinnedPtr<enumi> enumerate_start_points(const int dim, const int start_dims, dou
   return cuenum::create_start_point_array(start_points.size(), start_dims, start_points.begin(), start_points.end());
 }
 
-std::array<uint64_t, cudaenum_return_array_size> ext_cuda_enumerate(const int dim, enumf maxdist, std::function<extenum_cb_set_config> cbfunc,
+std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enumerate(const int dim, enumf maxdist, std::function<extenum_cb_set_config> cbfunc,
   std::function<extenum_cb_process_sol> cbsol, std::function<extenum_cb_process_subsol> cbsubsol,
   bool dual, bool findsubsols) 
 {
@@ -170,7 +170,7 @@ std::array<uint64_t, cudaenum_return_array_size> ext_cuda_enumerate(const int di
   } else if (findsubsols) {
     throw "Unsupported operation: findsubsols == true";
   }
-  std::array<uint64_t, cudaenum_return_array_size> result = {};
+  std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> result = {};
   PinnedPtr<enumf> mu = allocatePinnedMemory<enumf>(dim * dim);
   PinnedPtr<enumf> rdiag = allocatePinnedMemory<enumf>(dim);
   enumf radius = std::sqrt(maxdist);
@@ -197,3 +197,5 @@ std::array<uint64_t, cudaenum_return_array_size> ext_cuda_enumerate(const int di
   std::copy(node_counts.begin(), node_counts.end(), result.begin());
   return result;
 }
+
+const extenum_fc_enumerate* fplll_enumerate_fn = fplll_cuda_enumerate;

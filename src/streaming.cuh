@@ -140,7 +140,8 @@ public:
                     // no new data here in this buffer entry
                 } else if (last_written_count + 1 == new_written_count) {
                     enumf norm_square = static_cast<enumf*>(evaluator_memory(i))[j];
-                    enumi* x = static_cast<enumi*>(evaluator_memory(i) + (sizeof(enumf) + sizeof(unsigned int)) * buffer_size);
+                    enumi* points = static_cast<enumi*>(evaluator_memory(i) + (sizeof(enumf) + sizeof(unsigned int)) * buffer_size);
+                    enumi* x = /* TODO: extract the correct point */ points;
                     enumf new_enum_bound = callback(norm_square, x);
                     new_enumeration_bound = std::min<float>(new_enum_bound, new_enumeration_bound);
                 } else {

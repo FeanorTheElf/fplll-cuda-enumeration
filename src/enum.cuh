@@ -17,6 +17,7 @@
 #include <vector>
 #include <numeric>
 
+#include "constants.cuh"
 #include "atomic.h"
 #include "cuda_util.cuh"
 #include "prefix.cuh"
@@ -837,10 +838,6 @@ clear_level(CG &group, PrefixCounter<CG, block_size> &prefix_counter, unsigned i
     group.sync();
   }
 }
-
-constexpr unsigned int enumerate_block_size               = 128;
-constexpr unsigned int enumerate_cooperative_group_size   = 32;
-constexpr unsigned int enumerate_point_stream_buffer_size = 100;
 
 template <unsigned int levels, unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
 struct Opts

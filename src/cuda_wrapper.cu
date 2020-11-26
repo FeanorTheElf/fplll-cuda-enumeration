@@ -5,11 +5,6 @@
 
 namespace cuenum {
 
-constexpr int cudaenum_max_dims_per_level  = 4;
-constexpr int cudaenum_max_levels          = 19;
-constexpr int cudaenum_min_startdim        = 6;
-constexpr unsigned int cudaenum_max_nodes_per_level = 3100;
-
 template <int min> struct int_marker
 {
 };

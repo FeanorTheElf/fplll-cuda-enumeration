@@ -41,7 +41,7 @@ using CudaEvent = std::unique_ptr<std::remove_pointer<cudaEvent_t>::type, EventD
 using CudaStream = std::unique_ptr<std::remove_pointer<cudaStream_t>::type, StreamDeleter>;
 
 template<typename T>
-inline CudaPtr<T> allocateCudaMemory(size_t len, const char* file, const unsigned int line)
+inline CudaPtr<T> alloc_device_memory(size_t len, const char* file, const unsigned int line)
 {
 	T* result = nullptr;
 	checkCudaError(cudaMalloc(&result, len * sizeof(T)), file, line);
@@ -49,15 +49,14 @@ inline CudaPtr<T> allocateCudaMemory(size_t len, const char* file, const unsigne
 }
 
 template<typename T>
-inline PinnedPtr<T> allocatePinnedMemory(size_t len)
+inline PinnedPtr<T> alloc_pinned_memory(size_t len)
 {
 	T* result = nullptr;
 	checkCudaError(cudaMallocHost(&result, len * sizeof(T)), __FILE__, __LINE__);
 	return PinnedPtr<T>(result);
 }
 
-#define cuda_alloc(type, len) allocateCudaMemory<type>(len, __FILE__, __LINE__) 
-
+#define cuda_alloc(type, len) ::alloc_device_memory<type>(len, __FILE__, __LINE__) 
 
 
 #endif

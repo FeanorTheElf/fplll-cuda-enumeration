@@ -83,12 +83,12 @@ class PointStreamEndpoint {
   }
 
   inline unsigned int* host_has_written_round(unsigned int evaluator_id) {
-    return static_cast<unsigned int*>(evaluator_memory(evaluator_id) + sizeof(enumf) * buffer_size);
+    return reinterpret_cast<unsigned int*>(static_cast<unsigned char*>(evaluator_memory(evaluator_id)) + sizeof(enumf) * buffer_size);
   }
 
   inline unsigned int* device_has_written_round(unsigned int evaluator_id) {
-    void* device_evaluator_memory = device_memory + PointStreamEvaluator<buffer_size>::memory_size_in_bytes(point_dimension) * evaluator_id;
-    return static_cast<unsigned int*>(device_evaluator_memory + sizeof(enumf) * buffer_size);
+    unsigned char* device_evaluator_memory = static_cast<unsigned char*>(device_memory) + PointStreamEvaluator<buffer_size>::memory_size_in_bytes(point_dimension) * evaluator_id;
+    return reinterpret_cast<unsigned int*>(device_evaluator_memory + sizeof(enumf) * buffer_size);
   }
   
 public:
@@ -98,7 +98,7 @@ public:
       point_dimension(point_dimension),
       device_enumeration_bound_location(device_enumeration_bound_location),
       device_memory(device_memory),
-      host_memory(allocatePinnedMemory<unsigned char>(evaluator_count * PointStreamEvaluator<buffer_size>::memory_size_in_bytes(point_dimension)))
+      host_memory(alloc_pinned_memory<unsigned char>(evaluator_count * PointStreamEvaluator<buffer_size>::memory_size_in_bytes(point_dimension)))
     {
         const unsigned int used_device = 0;
         cudaDeviceProp deviceProp;
@@ -132,6 +132,7 @@ public:
         check(cudaStreamSynchronize(stream.get()));
 
         float new_enumeration_bound = INFINITY;
+        unsigned int point_count = 0;
         for (unsigned int i = 0; i < evaluator_count; ++i) {
             for (unsigned int j = 0; j < buffer_size; ++j) {
                 const unsigned int last_written_count = last_has_written_round[i][j];
@@ -139,8 +140,9 @@ public:
                 if (last_written_count == new_written_count) {
                     // no new data here in this buffer entry
                 } else if (last_written_count + 1 == new_written_count) {
+                    ++point_count;
                     enumf norm_square = static_cast<enumf*>(evaluator_memory(i))[j];
-                    enumi* points = static_cast<enumi*>(evaluator_memory(i) + (sizeof(enumf) + sizeof(unsigned int)) * buffer_size);
+                    enumi* points = reinterpret_cast<enumi*>(static_cast<unsigned char*>(evaluator_memory(i)) + (sizeof(enumf) + sizeof(unsigned int)) * buffer_size);
                     enumi* x = &points[j * point_dimension];
                     enumf evaluator_enum_bound = callback(norm_square, x);
                     new_enumeration_bound = std::min<float>(evaluator_enum_bound, new_enumeration_bound);
@@ -149,11 +151,11 @@ public:
                 }
             }
         }
-        if (!isinf(new_enumeration_bound)) {
+        if (point_count > 0) {
             uint32_t enumeration_bound_encoded = float_to_int_order_preserving_bijection(new_enumeration_bound);
             check(cudaMemcpyAsync(device_enumeration_bound_location, &enumeration_bound_encoded, sizeof(uint32_t), cudaMemcpyHostToDevice, stream.get()));
             if (print_status) {
-                std::cout << "Can decrease enum bound to " << new_enumeration_bound << std::endl;
+                std::cout << "Got " << point_count << " new solution points and can decrease enum bound to " << new_enumeration_bound << std::endl;
             }
         }
     } 

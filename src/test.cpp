@@ -42,7 +42,7 @@ void search_arr_dyn(const std::array<std::array<float, total_dims>, total_dims> 
 
   auto start_point_memory = create_start_point_array(start_points.size(), start_point_dim,
                                                      start_points.begin(), start_points.end());
-  search_enumeration_cuda(host_mu.get(), host_rdiag.get(), total_dims - start_point_dim,
+  search_enumeration(host_mu.get(), host_rdiag.get(), total_dims - start_point_dim,
                           start_point_memory.get(), static_cast<unsigned int>(start_points.size()),
                           start_point_dim, callback,
                           find_initial_radius<float, total_dims>(mu) * 1.1, opts);

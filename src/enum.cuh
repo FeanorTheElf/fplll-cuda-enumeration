@@ -29,17 +29,20 @@ namespace cuenum
 constexpr bool CUENUM_TRACE = false;
 
 /**
- * Stores the state of the enumeration tree search, i.e. all nodes of the tree whose subtrees have
- * to be searched, or are currently searched, ordered by tree level.
+ * Wrapper around the store of the state of the enumeration tree search, i.e. all nodes of the tree 
+ * whose subtrees have to be searched, or are currently searched, ordered by tree level.
  *
  * A node is a dimensions_per_level-level subtree of the enumeration tree that is traversed via
  * enumerate_recursive() and is given by the point corresponding to its root, i.e. a point in the
  * sublattice spanned by the last level * dimensions_per_level basis vectors.
+ * 
+ * This class is not itself the store, as it does not own the values, it just wraps the pointer to the
+ * memory to provide abstract access functionality.
  */
 template <unsigned int levels, unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
-struct SubtreeEnumerationBuffer
+class SubtreeEnumerationBuffer
 {
-  // private:
+private:
   // coefficients of the children enumeration for this point, used to pause and resume
   // enumerate_recursive() shape [levels, dimensions_per_level, max_nodes_per_level]
   enumi *enumeration_x;
@@ -110,7 +113,8 @@ public:
     }
   }
 
-  // ensure alignment
+  // ensure that the memory size is a multiple of sizeof(enumf), to have correct alignment
+  // if multiple buffers use subsequent memory batches
   constexpr static size_t memory_size_in_bytes =
       ((content_memory_size_in_bytes - 1) / sizeof(enumf) + 1) * sizeof(enumf);
 
@@ -580,7 +584,7 @@ __device__ __host__ void generate_nodes_children(
       CallbackType callback = {static_cast<unsigned int>(level + 1), index, mu, buffer};
       PerfCounter offset_counter = counter.offset_level(offset_kk);
       enumeration.template enumerate_recursive(
-          callback, max_paths, offset_counter, kk_marker<dimensions_per_level - 1>());
+          callback, max_paths, offset_counter, kk_marker<dimensions_per_level - 1>(), CoefficientIterator());
 
       buffer.set_enumeration(level, index, enumeration);
     }
@@ -621,7 +625,7 @@ __device__ __host__ void inline process_leaf_nodes(
     CallbackT callback = {level + 1, index,        start_point_dim,         process_sol,
                           mu,        start_points, radius_squared_location, buffer};
     enumeration.template enumerate_recursive(
-        callback, max_paths, node_counter, kk_marker<dimensions_per_level - 1>());
+        callback, max_paths, node_counter, kk_marker<dimensions_per_level - 1>(), CoefficientIterator());
 
     buffer.set_enumeration(level, index, enumeration);
   }

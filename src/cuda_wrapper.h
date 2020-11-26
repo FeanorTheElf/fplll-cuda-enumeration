@@ -34,7 +34,7 @@ struct CudaEnumOpts
 
 constexpr CudaEnumOpts default_opts = {50, .5, 3, 8, 32 * 256};
 
-std::vector<uint64_t> search_enumeration_cuda(const double *mu, const double *rdiag,
+std::vector<uint64_t> search_enumeration(const double *mu, const double *rdiag,
                                  const unsigned int enum_dimensions,
                                  const double *start_point_coefficients, unsigned int start_point_count,
                                  unsigned int start_point_dim, process_sol_fn evaluator,
@@ -42,7 +42,7 @@ std::vector<uint64_t> search_enumeration_cuda(const double *mu, const double *rd
 
 /**
  * Allocates memory and fills it with the given start points, so that it is directly copyable to the device
- * memory space (and therefore a correct parameter for search_enumeration_cuda()). The start points are given
+ * memory space (and therefore a correct parameter for search_enumeration()). The start points are given
  * as an iterator over indexable objects, each containing the start_point_dim coefficients of one start point.
  * The memory is allocated in page-locked memory to improve copy efficiency, but the provided unique pointer 
  * will correctly free it.
@@ -52,14 +52,14 @@ inline PinnedPtr<double>
 create_start_point_array(size_t start_point_count, size_t start_point_dim,
                          InputIt begin, InputIt end)
 {
-  PinnedPtr<double> result = allocatePinnedMemory<double>(start_point_count * start_point_dim);
+  PinnedPtr<double> result = alloc_pinned_memory<double>(start_point_count * start_point_dim);
   size_t i = 0;
   for (InputIt it = begin; it != end; ++it)
   {
     const auto& point = it->second;
     for (size_t j = 0; j < start_point_dim; ++j)
     {
-      result.get()[i * start_point_dim + j] = static_cast<double>(point[j].get_d());
+      result.get()[i * start_point_dim + j] = static_cast<double>(point[j]);
     }
     ++i;
   }
@@ -74,6 +74,6 @@ create_start_point_array(size_t start_point_count, size_t start_point_dim,
 
 std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int dim, double maxdist, std::function<extenum_cb_set_config> cbfunc,
   std::function<extenum_cb_process_sol> cbsol, std::function<extenum_cb_process_subsol> cbsubsol,
-  bool dual, bool findsubsols);
+  bool dual = false, bool findsubsols = false);
   
 #endif

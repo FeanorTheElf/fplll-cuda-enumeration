@@ -36,10 +36,26 @@ __device__ __host__ inline unsigned long long time()
 
 __device__ __host__ inline void runtime_error() {
 #ifdef __CUDA_ARCH__
-  asm("trap;");
+  __trap();
 #else
   throw;
 #endif
 }
+
+template<typename... Args>
+struct FnWrapper {
+  std::function<void(Args...)> fn;
+
+  FnWrapper(std::function<void(Args...)> fn) : fn(fn) {}
+
+  __device__ __host__ void operator()(Args... args) {
+#ifdef __CUDA_ARCH__
+    printf("Fatal bug");
+    runtime_error();
+#else
+    fn(args...);
+#endif
+  }
+};
 
 #endif

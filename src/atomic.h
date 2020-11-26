@@ -50,19 +50,44 @@ DEVICE_HOST_FUNCTION inline float int_to_float_order_preserving_bijection(unsign
     return bitcast<unsigned int, float>(value ^ (flip_all_if_negative_mask | 0x80000000));
 }
 
-// implementation is only atomic on the device
-DEVICE_HOST_FUNCTION inline unsigned long long atomic_add(unsigned long long *target,
-                                                         unsigned long long amount)
+/**
+ * Atomically loads the value at target, adds the given amount and stores the result at target. The
+ * loaded (old) value of target will be returned. This function is atomic w.r.t other kernel threads
+ * on the device, and not atomic if called from the host. 
+ */
+DEVICE_HOST_FUNCTION inline uint64_t atomic_add(uint64_t *target, uint64_t amount)
 {
+  static_assert(sizeof(unsigned long long) == sizeof(uint64_t), "atomicAdd is only defined for unsigned long long, so we can only use it for uint64_t if unsigned long long == uint64_t");
 #ifdef __CUDA_ARCH__
-    return atomicAdd(target, amount);
+    return atomicAdd(reinterpret_cast<unsigned long long*>(target), static_cast<unsigned long long>(amount));
 #else
     return (*target += amount) - amount;
 #endif
 }
 
-// implementation is only atomic on the device, requires ctr to be the same for all threads in the warp
-DEVICE_HOST_FUNCTION inline uint32_t aggregated_atomic_inc(uint32_t *ctr)
+/**
+ * Atomically loads the value at target, adds the given amount and stores the result at target. The
+ * loaded (old) value of target will be returned. This function is atomic w.r.t other kernel threads
+ * on the device, and not atomic if called from the host. 
+ */
+DEVICE_HOST_FUNCTION inline uint32_t atomic_add(uint32_t *target, uint32_t amount)
+{
+#ifdef __CUDA_ARCH__
+  return atomicAdd(target, amount);
+#else
+  return (*target += amount) - amount;
+#endif
+}
+
+/**
+ * Atomically loads the value at target, increments it and stores the result at target. The
+ * loaded (old) value of target will be returned. This function is atomic w.r.t other kernel threads
+ * on the device, and not atomic if called from the host. If a multiple, coalesced threads call
+ * this function simultaneously with different values of target, the behavior is undefined. In particular,
+ * it is safe if all threads in a warp call use the same value for target, independent of how they
+ * are coalesced.
+ */
+DEVICE_HOST_FUNCTION inline uint32_t aggregated_atomic_inc(uint32_t *target)
 {
 #ifdef __CUDA_ARCH__
   // use warp-aggregated atomic for improved performance
@@ -70,15 +95,22 @@ DEVICE_HOST_FUNCTION inline uint32_t aggregated_atomic_inc(uint32_t *ctr)
   uint32_t warp_res;
   if (g.thread_rank() == 0)
   {
-    warp_res = atomicAdd(ctr, g.size());
+    warp_res = atomicAdd(target, g.size());
   }
   return g.shfl(warp_res, 0) + g.thread_rank();
 #else
-  return (*ctr)++;
+  return (*target)++;
 #endif
 }
 
-// implementation is only atomic on the device, requires ctr to be the same for all threads in the warp
+/**
+ * Atomically loads the value at target, increments it and stores the result at target. The
+ * loaded (old) value of target will be returned. This function is atomic w.r.t other kernel threads
+ * on the device, and not atomic if called from the host. If a multiple, coalesced threads call
+ * this function simultaneously with different values of target, the behavior is undefined. In particular,
+ * it is safe if all threads in a warp call use the same value for target, independent of how they
+ * are coalesced.
+ */
 DEVICE_HOST_FUNCTION inline uint64_t aggregated_atomic_inc(uint64_t *ctr)
 {
   static_assert(sizeof(unsigned long long) == sizeof(uint64_t), "atomicAdd is only defined for unsigned long long, so we can only use it for uint64_t if unsigned long long == uint64_t");
@@ -96,17 +128,11 @@ DEVICE_HOST_FUNCTION inline uint64_t aggregated_atomic_inc(uint64_t *ctr)
 #endif
 }
 
-// implementation is only atomic on the device
-DEVICE_HOST_FUNCTION inline unsigned int atomic_add(unsigned int *target, unsigned int amount)
-{
-#ifdef __CUDA_ARCH__
-  return atomicAdd(target, amount);
-#else
-  return (*target += amount) - amount;
-#endif
-}
-
-// implementation is only atomic on the device
+/**
+ * Atomically loads the value at target, calculates min(loaded_value, value) and stores the result 
+ * at target. The loaded (old) value of target will be returned. This function is atomic w.r.t other 
+ * kernel threads on the device, and not atomic if called from the host. 
+ */
 DEVICE_HOST_FUNCTION inline uint32_t atomic_min(uint32_t *target, uint32_t value)
 {
 #ifdef __CUDA_ARCH__
@@ -121,19 +147,38 @@ DEVICE_HOST_FUNCTION inline uint32_t atomic_min(uint32_t *target, uint32_t value
 #endif
 }
 
-// implementation is only atomic on the device
+/**
+ * Atomically loads a representation of the floating point value at target, 
+ * calculates min(loaded_value, value) and stores a corresponding representation 
+ * of the result at target. Storing only a non-standard representation of the floating
+ * point numbers at target works around the problem that no atomics are provided
+ * for floats. If you have to directly interact with the representation, use
+ * int_to_float_order_preserving_bijection() and its inverse to convert to/from
+ * standard floats.
+ * The loaded (old) value of target will be returned. 
+ * 
+ * This function is atomic w.r.t other kernel threads on the device, and not atomic 
+ * if called from the host. 
+ */
 DEVICE_HOST_FUNCTION inline float atomic_min(uint32_t *target, float value)
 {
   return int_to_float_order_preserving_bijection(
       atomic_min(target, float_to_int_order_preserving_bijection(value)));
 }
 
-// implementation is only atomic on the device
 DEVICE_HOST_FUNCTION inline uint32_t atomic_load(volatile uint32_t *target)
 {
+  // in cuda, 64-resp. 32-bit loads cannot be "torn" (if properly aligned)
   return *target;
 }
 
+/**
+ * Performs a threadfence when called from the device, i.e. ensures that other device threads
+ * and reads/copies from the host that observe data written after this call also will observe
+ * all writes that happened before this call by the current thread.
+ * 
+ * Does nothing when called from the host.
+ */
 DEVICE_HOST_FUNCTION inline void threadfence_system() {
 #ifdef __CUDA_ARCH__
   __threadfence_system();

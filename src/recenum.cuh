@@ -17,15 +17,44 @@ template <int kk> struct kk_marker
 {
 };
 
-template <unsigned int maxdim> struct CudaEnumeration
+struct CoefficientIterator {
+  
+  __device__ __host__ constexpr inline enumi operator()(enumi last_coeff, const enumf center)
+  {
+    const enumi rounded_center = static_cast<enumi>(round(center));
+    last_coeff                 = 2 * rounded_center - last_coeff;
+    if (center >= rounded_center)
+    {
+      return last_coeff + static_cast<int>(last_coeff >= rounded_center);
+    }
+    else
+    {
+      return last_coeff - static_cast<int>(last_coeff <= rounded_center);
+    }
+  }
+
+};
+
+struct PositiveCoefficientIterator {
+
+  // For the last dimension, it is sufficient to consider only positive coefficients, as a lattice
+  // is closed w.r.t negation. In this case, use this coefficient iterator.
+  __device__ __host__ constexpr inline enumi operator()(enumi last_coeff, const enumf center)
+  {
+    return last_coeff - 1;
+  }
+
+};
+
+template <unsigned int maxdim> class CudaEnumeration
 {
 private:
 
   enumi x[maxdim];
   enumf partdist[maxdim];
   // different to base enumeration of fplll, the second index is shifted
-  // _[i][j] contains inner product of i-th orthogonalized basis vector with B * (0, ..., 0, x[j +
-  // 1], ... x[n])
+  // _[i][j] contains inner product of i-th orthogonalized basis vector with 
+  // B * (0, ..., 0, x[j + 1], ... x[n])
   enumf center_partsums[maxdim][maxdim];
   enumf center[maxdim];
   const uint32_t *radius_squared_location;
@@ -35,15 +64,33 @@ private:
 
 public:
 
-  template <typename Callback>
-  __device__ __host__ bool enumerate_recursive(Callback &callback, unsigned int &max_paths,
-                                               PerfCounter &counter,
-                                               kk_marker<0>);
+  __device__ __host__ CudaEnumeration() {}
 
-  template <int kk, typename Callback>
+  /**
+   * Initializes this enumeration object to enumerate points in the lattice spanned by the enum_dim x enum_dim lower-right
+   * submatrix of mu, around the origin.
+   */  
+  __device__ __host__ CudaEnumeration(Matrix mu, const enumf* rdiag, const uint32_t* radius_squared_location, unsigned int enum_dim)
+    : mu(mu), rdiag(rdiag), radius_squared_location(radius_squared_location)
+  {
+    for (unsigned int i = 0; i < maxdim; ++i) {
+      x[i] = NAN;
+      center_partsums[i][enum_dim - 1] = 0;
+    }
+    x[enum_dim - 1] = 0;
+    center[enum_dim - 1] = 0;
+    partdist[enum_dim - 1] = 0;
+  }
+
+  template <typename Callback, typename CoeffIt>
   __device__ __host__ bool enumerate_recursive(Callback &callback, unsigned int &max_paths,
                                                PerfCounter &counter,
-                                               kk_marker<kk>);
+                                               kk_marker<0>, CoeffIt);
+
+  template <int kk, typename Callback, typename CoeffIt>
+  __device__ __host__ bool enumerate_recursive(Callback &callback, unsigned int &max_paths,
+                                               PerfCounter &counter,
+                                               kk_marker<kk>, CoeffIt);
 
   template <int kk> __device__ __host__ bool is_enumeration_done() const;
 
@@ -69,26 +116,6 @@ __device__ __host__ inline bool CudaEnumeration<maxdim>::is_enumeration_done() c
   return isnan(x[kk]);
 }
 
-__device__ __host__ inline enumi next_coeff(enumi coeff, const enumf center)
-{
-  const enumi rounded_center = static_cast<enumi>(round(center));
-  coeff                      = 2 * rounded_center - coeff;
-  if (center >= rounded_center)
-  {
-    return coeff + static_cast<int>(coeff >= rounded_center);
-  }
-  else
-  {
-    return coeff - static_cast<int>(coeff <= rounded_center);
-  }
-}
-
-#if __cplusplus < 201703L
-#define if_constexpr
-#else
-#define if_constexpr if constexpr
-#endif
-
 /**
  * Searches the subtree of height kk + 1 using as root the values stored in this object. The
  * reference max_paths contains an integer that gives the maximal count of tree paths to search
@@ -97,13 +124,13 @@ __device__ __host__ inline enumi next_coeff(enumi coeff, const enumf center)
  * enumerate_recursive on this object. The function returns whether the subtree was completely
  * searched.
  * 
- * Adjustment of enumerate_recursive() in enumerate_base.cpp
+ * Adjustment of enumerate_recursive() in enumerate_base.cpp of fplll
  */
 template <unsigned int maxdim>
-template <int kk, typename Callback>
+template <int kk, typename Callback, typename CoeffIt>
 __device__ __host__ inline bool
 CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &max_paths,
-                                             PerfCounter &node_counter, kk_marker<kk>)
+                                             PerfCounter &node_counter, kk_marker<kk>, CoeffIt next_coeff)
 {
   static_assert(kk < static_cast<int>(maxdim) && kk > 0,
                 "Tree level count must between 0 and maximal enumeration dimension count");
@@ -112,7 +139,7 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
   enumf newdist = partdist[kk] + alphak * alphak * rdiag[kk];
 
   assert(max_paths >= 1);
-  assert(!isnan(x[kk]));
+  assert(!isnan(alphak));
   assert(partdist[kk] >= 0);
   assert(rdiag[kk] >= 0);
   assert(newdist >= 0);
@@ -140,7 +167,7 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
   while (true)
   {
     node_counter.inc(kk);
-    bool is_done = enumerate_recursive(callback, max_paths, node_counter, kk_marker<kk - 1>());
+    bool is_done = enumerate_recursive(callback, max_paths, node_counter, kk_marker<kk - 1>(), CoefficientIterator());
     if (!is_done)
     {
       return false;
@@ -178,10 +205,10 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
 }
 
 template <unsigned int maxdim>
-template <typename Callback>
+template <typename Callback, typename CoeffIt>
 __device__ __host__ inline bool
 CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &max_paths,
-                                             PerfCounter &node_counter, kk_marker<0>)
+                                             PerfCounter &node_counter, kk_marker<0>, CoeffIt next_coeff)
 {
   constexpr unsigned int kk = 0;
   static_assert(kk < static_cast<int>(maxdim) && kk >= 0,

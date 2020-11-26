@@ -1,11 +1,13 @@
 #include "atomic.h"
 #include "enum.cuh"
 #include "cuda_wrapper.h"
+#include <map>
 
 namespace cuenum {
 
 constexpr int cudaenum_max_dims_per_level  = 4;
 constexpr int cudaenum_max_levels          = 19;
+constexpr int cudaenum_min_startdim        = 6;
 constexpr unsigned int cudaenum_max_nodes_per_level = 3100;
 
 template <int min> struct int_marker
@@ -93,7 +95,7 @@ inline std::vector<uint64_t> search_enumeration_choose_dims_per_level(
     CudaEnumOpts enum_opts, int_marker<min_dimensions_per_level>,
     int_marker<delta_dimensions_per_level>)
 {
-  static_assert(delta_dimensions_per_level >= 0, "delta_dimensions_per_level >= 0must hold");
+  static_assert(delta_dimensions_per_level >= 0, "delta_dimensions_per_level >= 0 must hold");
   assert(enum_opts.dimensions_per_level >= min_dimensions_per_level);
   assert(enum_opts.dimensions_per_level <= min_dimensions_per_level + delta_dimensions_per_level);
 
@@ -114,7 +116,7 @@ inline std::vector<uint64_t> search_enumeration_choose_dims_per_level(
   }
 }
 
-std::vector<uint64_t> search_enumeration_cuda(const double *mu, const double *rdiag,
+std::vector<uint64_t> search_enumeration(const double *mu, const double *rdiag,
                              const unsigned int enum_dimensions,
                              const enumi *start_point_coefficients, unsigned int start_point_count,
                              unsigned int start_point_dim, process_sol_fn evaluator,
@@ -126,39 +128,65 @@ std::vector<uint64_t> search_enumeration_cuda(const double *mu, const double *rd
                                            int_marker<cudaenum_max_dims_per_level - 1>());
 }
 
+typedef std::function<void(const enumi*, enumf)> simple_callback_fn;
+
+template<unsigned int max_dim, int dims>
+inline void recenum_choose_template_instance(
+  CudaEnumeration<max_dim> enumeration, 
+  unsigned int dim, 
+  simple_callback_fn callback, uint64_t *nodes,
+  int_marker<dims>, int_marker<0>
+) {
+  static_assert(dims > 0, "Start point dimension count must be >= 0");
+  assert(dims == dim);
+  unsigned int max_paths = std::numeric_limits<unsigned int>::max();
+  PerfCounter node_counter(nodes);
+  FnWrapper<const enumi*, enumf> wrapped_callback(callback);
+  enumeration.template enumerate_recursive<dims - 1, FnWrapper<const enumi*, enumf>, PositiveCoefficientIterator>(wrapped_callback, max_paths, node_counter, kk_marker<dims - 1>(), PositiveCoefficientIterator());
 }
 
-// TODO: replace with recursive enumeration from fplll
-#include "util.h"
-
-PinnedPtr<enumi> enumerate_start_points(const int dim, const int start_dims, double radius_squared, const enumf* mu, const enumf* rdiag, unsigned int& start_point_count) {
-
-  // later, when using an evaluator + recursive fplll enumeration, this pair interface is what we need
-  typedef int Dummy;
-  std::vector<std::pair<Dummy, std::vector<FloatWrapper>>> start_points;
-
-  std::unique_ptr<enumf[]> lattice(new enumf[dim * dim]);
-  std::memcpy(lattice.get(), mu, dim * dim * sizeof(enumf));
-  for (unsigned int i = 0; i < dim; ++i) {
-    for (unsigned int j = 0; j < dim; ++j) {
-      lattice[i * dim + j] *= std::sqrt(rdiag[i]);
-    }
-  }
-
-  std::vector<FloatWrapper> x;
-  x.resize(start_dims, { 0 });
-  x[start_dims - 1] = -1;
-  std::function<void(const std::vector<FloatWrapper> &)> callback =
-      [&start_points](const std::vector<FloatWrapper> &a) { 
-        start_points.push_back(std::make_pair(0, a)); 
-      };
-  do
+template<unsigned int max_dim, int min_dim, int delta_dim>
+inline void recenum_choose_template_instance(
+  CudaEnumeration<max_dim> enumeration, 
+  unsigned int dim, 
+  simple_callback_fn callback, uint64_t *nodes, 
+  int_marker<min_dim>, int_marker<delta_dim>
+) {
+  constexpr int delta_mid = delta_dim / 2;
+  if (dim <= min_dim + delta_mid)
   {
-    ++x[start_dims - 1];
-  } while (!naive_enum_recursive<FloatWrapper, enumf>(x, start_dims, dim, 0, 0, lattice.get(), dim - 1,
-                                                       radius_squared, callback));
+    return recenum_choose_template_instance(
+      enumeration, dim, callback, nodes, int_marker<min_dim>(), int_marker<delta_mid>());
+  }
+  else
+  {
+    return recenum_choose_template_instance(
+      enumeration, dim, callback, nodes, int_marker<min_dim + delta_mid + 1>(), int_marker<delta_dim - delta_mid - 1>());
+  }
+}
+
+template<unsigned int max_startdim>
+PinnedPtr<enumi> enumerate_start_points(const int dim, const int start_dims, double radius_squared, const enumf* mu, const enumf* rdiag, unsigned int& start_point_count, uint64_t* nodes) {
+
+  std::multimap<enumf, std::vector<enumi>> start_points;
+
+  uint32_t radius_squared_location = float_to_int_order_preserving_bijection(radius_squared);
+  Matrix mu_matrix = Matrix(mu, dim).block(dim - start_dims, dim - start_dims);
+  CudaEnumeration<max_startdim> enumobj(mu_matrix, &rdiag[dim - start_dims], &radius_squared_location, start_dims);
+
+  simple_callback_fn callback = [&start_points, start_dims](const enumi *x, enumf squared_norm) {
+    start_points.insert(std::make_pair(squared_norm, std::vector<enumi>(x, &x[start_dims]))); 
+  };
+
+  constexpr int min_dim = cudaenum_min_startdim;
+  constexpr int delta_dim = max_startdim - cudaenum_min_startdim;
+  
+  recenum_choose_template_instance(enumobj, start_dims, callback, nodes, int_marker<min_dim>(), int_marker<delta_dim>());
+
   start_point_count = start_points.size();
-  return cuenum::create_start_point_array(start_points.size(), start_dims, start_points.begin(), start_points.end());
+  return create_start_point_array(start_points.size(), start_dims, start_points.begin(), start_points.end());
+}
+
 }
 
 std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int dim, enumf maxdist, std::function<extenum_cb_set_config> cbfunc,
@@ -172,8 +200,8 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
   }
 
   std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> result = {};
-  PinnedPtr<enumf> mu = allocatePinnedMemory<enumf>(dim * dim);
-  PinnedPtr<enumf> rdiag = allocatePinnedMemory<enumf>(dim);
+  PinnedPtr<enumf> mu = alloc_pinned_memory<enumf>(dim * dim);
+  PinnedPtr<enumf> rdiag = alloc_pinned_memory<enumf>(dim);
   std::unique_ptr<enumf[]> pruning(new enumf[dim]);
   enumf radius = std::sqrt(maxdist);
 
@@ -186,7 +214,7 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
 
   cuenum::CudaEnumOpts opts = cuenum::default_opts;
   
-  int start_dims = 6;
+  int start_dims = cuenum::cudaenum_min_startdim;
   while ((dim - start_dims) % opts.dimensions_per_level != 0) {
     ++start_dims;
   }
@@ -196,13 +224,14 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
   }
 
   unsigned int start_point_count = 0;
-  PinnedPtr<enumi> start_point_array = enumerate_start_points(dim, start_dims, maxdist, mu.get(), rdiag.get(), start_point_count);
+  uint64_t* start_enum_node_counts = &result[dim - start_dims];
+  PinnedPtr<enumi> start_point_array = cuenum::enumerate_start_points<cuenum::cudaenum_min_startdim + cuenum::cudaenum_max_dims_per_level>(dim, start_dims, maxdist, mu.get(), rdiag.get(), start_point_count, start_enum_node_counts);
 
-  std::vector<uint64_t> node_counts = cuenum::search_enumeration_cuda(mu.get(), rdiag.get(), dim - start_dims, start_point_array.get(), 
+  std::vector<uint64_t> node_counts = cuenum::search_enumeration(mu.get(), rdiag.get(), dim - start_dims, start_point_array.get(), 
     start_point_count, start_dims, cbsol, radius, opts);
 
   std::copy(node_counts.begin(), node_counts.end(), result.begin());
   return result;
 }
 
-constexpr extenum_fc_enumerate* __check_function_interface = fplll_cuda_enum;
+constexpr extenum_fc_enumerate* __check_function_interface_matches = fplll_cuda_enum;

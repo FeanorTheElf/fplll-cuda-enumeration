@@ -7,11 +7,25 @@ endif
 NVCC?=nvcc
 CXX?=g++
 
-all:
-	$(NVCC) -ccbin $(CXX) -O3 -D NDEBUG src/test.cpp src/testdata.cpp src/cuda_wrapper.cu
+DBG_FLAGS=-g -G -O0 -D DEBUG
+RLS_FLAGS=-O3 -D NDEBUG
+SRC=src/cuda_wrapper.cu
+TEST_SRC=$(SRC) src/test.cpp src/testdata.cpp
+
+rls:
+	$(NVCC) -ccbin $(CXX) $(RLS_FLAGS) $(TEST_SRC) -o cudaenum_test
 
 dbg:
-	$(NVCC) -ccbin $(CXX) -g -G -O0 -D DEBUG src/test.cpp src/testdata.cpp src/cuda_wrapper.cu
+	$(NVCC) -ccbin $(CXX) $(DBG_FLAGS) $(TEST_SRC) -o cudaenum_test
+
+perf:
+	$(NVCC) -ccbin $(CXX) $(RLS_FLAGS) -D PERF_TEST $(TEST_SRC) -o cudaenum_test
+
+test: dbg
+	./cudaenum_test
 
 lib:
-	$(NVCC) -ccbin $(CXX) --compiler-options -fPIC --shared -D NDEBUG -O3 src/cuda_wrapper.cu -o libcudaenum.so
+	$(NVCC) -ccbin $(CXX) --compiler-options -fPIC --shared $(RLS_FLAGS) $(SRC) -o libcudaenum.so
+
+dbg_lib:
+	$(NVCC) -ccbin $(CXX) --compiler-options -fPIC --shared $(DBG_FLAGS) $(SRC) -o libcudaenum.so

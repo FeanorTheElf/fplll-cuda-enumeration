@@ -13,7 +13,7 @@ using namespace cuenum;
 typedef float enumi;
 typedef double enumf;
 
-float find_initial_radius(const float* lattice, const unsigned int n) {
+float find_initial_radius(const float* lattice, size_t n) {
     float result = INFINITY;
     for (size_t i = 0; i < n; ++i) {
         float norm_squared = 0;
@@ -25,7 +25,7 @@ float find_initial_radius(const float* lattice, const unsigned int n) {
     return sqrt(result);
 }
 
-float find_initial_radius(const float* mu, const float* rdiag, const unsigned int n) {
+float find_initial_radius(const float* mu, const float* rdiag, size_t n) {
     float result = INFINITY;
     for (size_t i = 0; i < n; ++i) {
         float norm_squared = 0;
@@ -47,18 +47,37 @@ void set_lattice_config(const float* lattice, double* mu, size_t mudim, bool mut
     }
 }
 
+bool matches_solution(const float* expected, const double* actual, size_t n) {
+    bool matches_pos = true;
+    bool matches_neg = true;
+    for (size_t i = 0; i < n; ++i) {
+        // the solution vectors contain integers, so == is ok here
+        matches_pos &= expected[i] == actual[i];
+        matches_neg &= expected[i] == -actual[i];
+    }
+    return matches_pos || matches_neg;
+}
+
 void test_small() {
   
   constexpr unsigned int total_dim       = 20;
-  const std::array<std::array<float, total_dim>, total_dim> &lattice = test_mu_small;
+  const std::array<std::array<float, total_dim>, total_dim>& lattice = test_mu_small;
+  const std::array<float, total_dim>& solution = test_solution_small;
 
   double maxdist = find_initial_radius(&lattice[0][0], total_dim) * 1.05;
   maxdist = maxdist * maxdist; 
   std::function<extenum_cb_set_config> set_config = [&lattice](double *mu, size_t mudim, bool mutranspose, double *rdiag, double *pruning) {
       set_lattice_config(&lattice[0][0], mu, mudim, mutranspose, rdiag, pruning);
   };
-  std::function<extenum_cb_process_sol> process_sol = [](double norm_square, double* x)-> double { return norm_square; };
+  bool found_sol = false;
+  std::function<extenum_cb_process_sol> process_sol = [&found_sol, &solution, total_dim](double norm_square, double* x)-> double {
+      found_sol |= matches_solution(&solution[0], x, total_dim);
+      return norm_square; 
+  };
   fplll_cuda_enum(total_dim, maxdist, set_config, process_sol, nullptr, false, false);
+  if (!found_sol) {
+      throw "Callback was not called with correct solution!";
+  }
 }
 
 void test_knapsack() {

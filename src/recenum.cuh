@@ -21,27 +21,21 @@ struct CoefficientIterator {
   
   __device__ __host__ inline enumi operator()(enumi last_coeff, const enumf center, const enumf partdist)
   {
-    const enumi rounded_center = static_cast<enumi>(round(center));
-    last_coeff                 = 2 * rounded_center - last_coeff;
-    if (center >= rounded_center)
-    {
-      return last_coeff + static_cast<int>(last_coeff >= rounded_center);
+    if (partdist == 0) {
+      return last_coeff + 1;
     }
-    else
-    {
-      return last_coeff - static_cast<int>(last_coeff <= rounded_center);
+    else {
+      const enumi rounded_center = static_cast<enumi>(round(center));
+      last_coeff = 2 * rounded_center - last_coeff;
+      if (center >= rounded_center)
+      {
+        return last_coeff + static_cast<int>(last_coeff >= rounded_center);
+      }
+      else
+      {
+        return last_coeff - static_cast<int>(last_coeff <= rounded_center);
+      }
     }
-  }
-
-};
-
-struct PositiveCoefficientIterator {
-
-  // For the last dimension, it is sufficient to consider only positive coefficients, as a lattice
-  // is closed w.r.t negation. In this case, use this coefficient iterator.
-  __device__ __host__ constexpr inline enumi operator()(enumi last_coeff, const enumf center, const enumf partdist)
-  {
-    return last_coeff - 1;
   }
 
 };

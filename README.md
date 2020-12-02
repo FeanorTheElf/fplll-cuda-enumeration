@@ -1,3 +1,13 @@
+# Overview
+
+This library contains code to perform a lattice enumeration (i.e. searching lattice vectors within some radius for a shortest, nonzero vector) on the GPU, using Cuda. The interface is designed to be usable as external enumerator in [fplll](https://github.com/fplll/fplll).
+
+# Building
+
+On Linux, you can use the provided Makefile. Currently, it only supports gcc as host compiler, but the adjustments for another compiler in the Makefile should be straightforward.
+
+On Windows, you can use the provided Visual Studio solution. However, note that you will not be able to use the generated binaries with fplll, as fplll only supports Linux binaries.
+
 # CUDA Enumeration Idea
 
 In this part, we describe how the enumeration algorithm is parallelized on Cuda Blocks and Threads.
@@ -21,7 +31,9 @@ The nodes on level i in the tree are given by all points with norm less than som
 
 If each Cuda thread performed a simple depth-first search independent of each other, this would lead very inefficient branching and memory accesses. Instead, a hybrid between depth-first search of the tree and breadth-first search is chosen:
 
-Each thread block works independently, but within a thread block, there is always a list of nodes whose subtrees have yet to be searched. In each step, each thread gets one of these buffer nodes assigned, and calculates its children (usually in muliple batches to prevent huge children counts), which are again added to the list. In contrast to the standard breadth-first search however, open nodes at the downmost tree level are processed first, so that we find first solutions as fast as possible, and to prevent huge list sizes. For efficiency reasons, all threads always work on nodes on the same level, and the open nodes are stored by level.
+Each thread warp works independently. However, within a warp, we use a breadth-first idea, so there is always a list of nodes whose subtrees have yet to be searched ("list of open nodes"). In each step, each thread gets one of these buffer nodes assigned, and calculates its children (usually in muliple batches to prevent huge children counts), which are again added to the list. In contrast to the standard breadth-first search however, open nodes at the downmost tree level are processed first, so that we find first solutions as fast as possible, and to prevent huge list sizes. For efficiency reasons, all threads always work on nodes on the same level, and the open nodes are stored by level. 
+
+Summarized, this open node list is not used to make sure that we search nodes nearer to the root first, but to be able to assign each thread a node from the same level (leading to efficient memory access patterns), as we can choose from many open nodes.
 
 ![Schematic enumeration tree, traversed by a block with two threads](./enum_tree_graphic.svg)
 
@@ -31,4 +43,4 @@ To reduce the great overhead introduced by managing and storing enumeration tree
 
 Formally, for a constant count of tree levels c, the tree nodes at level i are now points in the projection of L into U<sub>n-ci</sub> with bounded norm. The root is still only the origin, but the children nodes are now lifted not only one dimension, but c dimensions. In particular, an enumeration algorithm is again required to compute the children. For this, an adaption of the recursive base enumeration is used.
 
-Apart from these changes, the search works exactly as in the simple enumeration tree, except now the internal state of the recursive algorithm must be stored with the nodes.
+Apart from these changes, the search works exactly as in the simple enumeration tree, except now the internal state of the recursive algorithm must be stored with the nodes, so that we can resume the children enumeration later.

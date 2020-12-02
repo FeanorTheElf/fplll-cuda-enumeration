@@ -21,4 +21,5 @@ extern const std::array<std::array<float, 50>, 50> test_mu_knapsack_big;
  * Up to orthogonal transform equal to test_mu_knapsack_big. This is the result of
  * the fplll preprocessing on test_mu_knapsack_big, so use this to compare performance.
  */
-extern const std::array<std::array<float, 50>, 50> test_mu_knapsack_compare;
+extern const std::array<std::array<float, 50>, 50> test_mu_compare;
+extern const std::array<float, 50> test_rdiag_compare;

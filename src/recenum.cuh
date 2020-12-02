@@ -19,7 +19,7 @@ template <int kk> struct kk_marker
 
 struct CoefficientIterator {
   
-  __device__ __host__ inline enumi operator()(enumi last_coeff, const enumf center)
+  __device__ __host__ inline enumi operator()(enumi last_coeff, const enumf center, const enumf partdist)
   {
     const enumi rounded_center = static_cast<enumi>(round(center));
     last_coeff                 = 2 * rounded_center - last_coeff;
@@ -39,7 +39,7 @@ struct PositiveCoefficientIterator {
 
   // For the last dimension, it is sufficient to consider only positive coefficients, as a lattice
   // is closed w.r.t negation. In this case, use this coefficient iterator.
-  __device__ __host__ constexpr inline enumi operator()(enumi last_coeff, const enumf center)
+  __device__ __host__ constexpr inline enumi operator()(enumi last_coeff, const enumf center, const enumf partdist)
   {
     return last_coeff - 1;
   }
@@ -173,7 +173,7 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
       return false;
     }
 
-    x[kk] = next_coeff(x[kk], center[kk]);
+    x[kk] = next_coeff(x[kk], center[kk], partdist[kk]);
 
     enumf alphak2  = x[kk] - center[kk];
     enumf newdist2 = partdist[kk] + alphak2 * alphak2 * rdiag[kk];
@@ -234,7 +234,7 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
   while (true)
   {
     node_counter.inc(kk);
-    x[kk] = next_coeff(x[kk], center[kk]);
+    x[kk] = next_coeff(x[kk], center[kk], partdist[kk]);
 
     enumf alphak2  = x[kk] - center[kk];
     enumf newdist2 = partdist[kk] + alphak2 * alphak2 * rdiag[kk];

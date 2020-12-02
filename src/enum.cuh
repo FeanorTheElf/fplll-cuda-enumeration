@@ -44,61 +44,77 @@ template <unsigned int levels, unsigned int dimensions_per_level, unsigned int m
 class SubtreeEnumerationBuffer
 {
 private:
+
+    unsigned char* memory;
+
+    constexpr static unsigned int dimensions = levels * dimensions_per_level;
+
+    constexpr static unsigned int enumeration_x_size_in_bytes =
+        sizeof(enumi) * levels * dimensions_per_level * max_nodes_per_level;
+
+    constexpr static unsigned int coefficient_size_in_bytes =
+        sizeof(enumi) * levels * dimensions_per_level * max_nodes_per_level;
+
+    constexpr static unsigned int center_partsum_size_in_bytes =
+        sizeof(enumf) * levels * dimensions * max_nodes_per_level;
+
+    constexpr static unsigned int partdist_size_in_bytes =
+        sizeof(enumf) * levels * max_nodes_per_level;
+
+    constexpr static unsigned int parent_indices_size_in_bytes =
+        sizeof(unsigned int) * levels * max_nodes_per_level;
+
+    constexpr static unsigned int open_node_count_size_in_bytes = sizeof(unsigned int) * levels;
+
+    constexpr static size_t content_memory_size_in_bytes =
+        enumeration_x_size_in_bytes + coefficient_size_in_bytes + center_partsum_size_in_bytes +
+        partdist_size_in_bytes + parent_indices_size_in_bytes + open_node_count_size_in_bytes;
+
   // coefficients of the children enumeration for this point, used to pause and resume
   // enumerate_recursive() shape [levels, dimensions_per_level, max_nodes_per_level]
-  enumi *enumeration_x;
+  __device__ __host__ inline enumi* enumeration_x() {
+      return reinterpret_cast<enumi*>(memory + center_partsum_size_in_bytes +
+          partdist_size_in_bytes);
+  }
+
   // last dimensions_per_level coefficients of the point, the other coefficients must be retrieved
   // by querying the parent node shape [levels, dimensions_per_level, max_nodes_per_level]
-  enumi *coefficients;
+  __device__ __host__ inline enumi* coefficients() {
+      return reinterpret_cast<enumi*>(memory + center_partsum_size_in_bytes +
+          partdist_size_in_bytes +
+          enumeration_x_size_in_bytes);
+  }
+
   // inner products with the scaled lattice vectors of the point, only the first (levels - level) *
   // dimensions_per_level are of interest shape [levels, dimensions, max_nodes_per_level]
-  enumf *center_partsum;
+  __device__ __host__ inline enumf* center_partsum() {
+      return reinterpret_cast<enumf*>(memory);
+  }
+
   // squared norm of the point, projected into the perpendicular subspace to the first (levels -
   // level) * dimensions_per_level basis vectors shape [levels, max_nodes_per_level]
-  enumf *partdist;
+  __device__ __host__ inline enumf* partdist() {
+      return reinterpret_cast<enumf*>(memory + center_partsum_size_in_bytes);
+  }
+
   // shape [levels, max_nodes_per_level]
-  unsigned int *parent_indices;
+  __device__ __host__ inline unsigned int* parent_indices() {
+      return reinterpret_cast<unsigned int*>(
+          memory + center_partsum_size_in_bytes + partdist_size_in_bytes +
+          enumeration_x_size_in_bytes + coefficient_size_in_bytes);
+  }
+
   // shape [levels]
-  unsigned int *open_node_count;
+  __device__ __host__ inline unsigned int* open_node_count() {
+      return reinterpret_cast<unsigned int*>(
+          memory + center_partsum_size_in_bytes + partdist_size_in_bytes +
+          enumeration_x_size_in_bytes + coefficient_size_in_bytes + parent_indices_size_in_bytes);
+  }
 
-  constexpr static unsigned int dimensions = levels * dimensions_per_level;
-
-  constexpr static unsigned int enumeration_x_size_in_bytes =
-      sizeof(enumi) * levels * dimensions_per_level * max_nodes_per_level;
-
-  constexpr static unsigned int coefficient_size_in_bytes =
-      sizeof(enumi) * levels * dimensions_per_level * max_nodes_per_level;
-
-  constexpr static unsigned int center_partsum_size_in_bytes =
-      sizeof(enumf) * levels * dimensions * max_nodes_per_level;
-
-  constexpr static unsigned int partdist_size_in_bytes =
-      sizeof(enumf) * levels * max_nodes_per_level;
-
-  constexpr static unsigned int parent_indices_size_in_bytes =
-      sizeof(unsigned int) * levels * max_nodes_per_level;
-
-  constexpr static unsigned int open_node_count_size_in_bytes = sizeof(unsigned int) * levels;
-
-  constexpr static size_t content_memory_size_in_bytes =
-      enumeration_x_size_in_bytes + coefficient_size_in_bytes + center_partsum_size_in_bytes +
-      partdist_size_in_bytes + parent_indices_size_in_bytes + open_node_count_size_in_bytes;
 
 public:
   __device__ __host__ inline SubtreeEnumerationBuffer(unsigned char *memory)
-      : center_partsum(reinterpret_cast<enumf *>(memory)),
-        partdist(reinterpret_cast<enumf *>(memory + center_partsum_size_in_bytes)),
-        enumeration_x(reinterpret_cast<enumi *>(memory + center_partsum_size_in_bytes +
-                                                partdist_size_in_bytes)),
-        coefficients(reinterpret_cast<enumi *>(memory + center_partsum_size_in_bytes +
-                                               partdist_size_in_bytes +
-                                               enumeration_x_size_in_bytes)),
-        parent_indices(reinterpret_cast<unsigned int *>(
-            memory + center_partsum_size_in_bytes + partdist_size_in_bytes +
-            enumeration_x_size_in_bytes + coefficient_size_in_bytes)),
-        open_node_count(reinterpret_cast<unsigned int *>(
-            memory + center_partsum_size_in_bytes + partdist_size_in_bytes +
-            enumeration_x_size_in_bytes + coefficient_size_in_bytes + parent_indices_size_in_bytes))
+      : memory(memory)
   {
     assert(((intptr_t)memory) % sizeof(enumf) == 0);
   }
@@ -109,7 +125,7 @@ public:
     {
       for (unsigned int i = 0; i < levels; ++i)
       {
-        open_node_count[i] = 0;
+        open_node_count()[i] = 0;
       }
     }
   }
@@ -141,19 +157,19 @@ public:
 
     for (unsigned int i = 0; i < dimensions_per_level; ++i)
     {
-      result.x[i] = enumeration_x[tree_level * dimensions_per_level * max_nodes_per_level +
+      result.x[i] = enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                                   i * max_nodes_per_level + index];
 
-      const enumf center_partsum_i = center_partsum[tree_level * dimensions * max_nodes_per_level +
+      const enumf center_partsum_i = center_partsum()[tree_level * dimensions * max_nodes_per_level +
                                                     (offset_kk + i) * max_nodes_per_level + index];
       assert(!isnan(center_partsum_i));
       result.center_partsums[i][dimensions_per_level - 1] = center_partsum_i;
     }
 
     result.center[dimensions_per_level - 1] =
-        center_partsum[tree_level * dimensions * max_nodes_per_level +
+        center_partsum()[tree_level * dimensions * max_nodes_per_level +
                        (offset_kk + dimensions_per_level - 1) * max_nodes_per_level + index];
-    result.partdist[dimensions_per_level - 1] = partdist[tree_level * max_nodes_per_level + index];
+    result.partdist[dimensions_per_level - 1] = partdist()[tree_level * max_nodes_per_level + index];
     return result;
   }
 
@@ -169,17 +185,17 @@ public:
 
     for (unsigned int i = 0; i < dimensions_per_level; ++i)
     {
-      enumeration_x[tree_level * dimensions_per_level * max_nodes_per_level +
+      enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                     i * max_nodes_per_level + index] = value.x[i];
 
-      assert(center_partsum[tree_level * dimensions * max_nodes_per_level + 
+      assert(center_partsum()[tree_level * dimensions * max_nodes_per_level +
                             (offset_kk + i) * max_nodes_per_level + index] == 
              value.center_partsums[i][dimensions_per_level - 1]);
     }
-    assert(center_partsum[tree_level * dimensions * max_nodes_per_level +
+    assert(center_partsum()[tree_level * dimensions * max_nodes_per_level +
                           (offset_kk + dimensions_per_level - 1) * max_nodes_per_level + index] ==
            value.center[dimensions_per_level - 1]);
-    assert(partdist[tree_level * max_nodes_per_level + index] ==
+    assert(partdist()[tree_level * max_nodes_per_level + index] ==
            value.partdist[dimensions_per_level - 1]);
   }
 
@@ -188,11 +204,11 @@ public:
   {
     for (unsigned int i = 0; i < dimensions_per_level; ++i)
     {
-      enumeration_x[tree_level * dimensions_per_level * max_nodes_per_level +
+      enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                     i * max_nodes_per_level + index] = NAN;
     }
-    partdist[tree_level * max_nodes_per_level + index] = parent_partdist;
-    enumeration_x[tree_level * dimensions_per_level * max_nodes_per_level +
+    partdist()[tree_level * max_nodes_per_level + index] = parent_partdist;
+    enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                   (dimensions_per_level - 1) * max_nodes_per_level + index] =
         static_cast<enumi>(round(center));
     assert(!isnan(static_cast<enumi>(round(center))));
@@ -204,7 +220,7 @@ public:
     assert(tree_level < levels);
     assert(index < max_nodes_per_level);
     assert(orth_basis_index < dimensions);
-    center_partsum[tree_level * dimensions * max_nodes_per_level +
+    center_partsum()[tree_level * dimensions * max_nodes_per_level +
                    orth_basis_index * max_nodes_per_level + index] = value;
   }
 
@@ -214,7 +230,7 @@ public:
     assert(tree_level < levels);
     assert(index < max_nodes_per_level);
     assert(orth_basis_index < dimensions);
-    return center_partsum[tree_level * dimensions * max_nodes_per_level +
+    return center_partsum()[tree_level * dimensions * max_nodes_per_level +
                           orth_basis_index * max_nodes_per_level + index];
   }
 
@@ -224,7 +240,7 @@ public:
     assert(tree_level < levels);
     assert(index < max_nodes_per_level);
     assert(coordinate < dimensions_per_level);
-    return coefficients[tree_level * dimensions_per_level * max_nodes_per_level +
+    return coefficients()[tree_level * dimensions_per_level * max_nodes_per_level +
                         coordinate * max_nodes_per_level + index];
   }
 
@@ -234,7 +250,7 @@ public:
     assert(tree_level < levels);
     assert(index < max_nodes_per_level);
     assert(coordinate < dimensions_per_level);
-    coefficients[tree_level * dimensions_per_level * max_nodes_per_level +
+    coefficients()[tree_level * dimensions_per_level * max_nodes_per_level +
                  coordinate * max_nodes_per_level + index] = value;
   }
 
@@ -243,14 +259,14 @@ public:
   {
     assert(tree_level < levels);
     assert(index < max_nodes_per_level);
-    return parent_indices[tree_level * max_nodes_per_level + index];
+    return parent_indices()[tree_level * max_nodes_per_level + index];
   }
 
   __device__ __host__ inline enumf get_partdist(unsigned int tree_level, unsigned int index)
   {
     assert(tree_level < levels);
     assert(index < max_nodes_per_level);
-    return partdist[tree_level * max_nodes_per_level + index];
+    return partdist()[tree_level * max_nodes_per_level + index];
   }
 
   __device__ __host__ inline void set_partdist(unsigned int tree_level, unsigned int index,
@@ -258,27 +274,27 @@ public:
   {
     assert(tree_level < levels);
     assert(index < max_nodes_per_level);
-    partdist[tree_level * max_nodes_per_level + index] = value;
+    partdist()[tree_level * max_nodes_per_level + index] = value;
   }
 
   __device__ __host__ inline unsigned int get_node_count(unsigned int tree_level)
   {
     assert(tree_level < levels);
-    return open_node_count[tree_level];
+    return open_node_count()[tree_level];
   }
 
   __device__ __host__ inline unsigned int add_node(unsigned int tree_level,
                                                    unsigned int parent_node_index)
   {
     assert(tree_level < levels);
-    const unsigned int new_task_index = aggregated_atomic_inc(&open_node_count[tree_level]);
+    const unsigned int new_task_index = aggregated_atomic_inc(&open_node_count()[tree_level]);
     assert(new_task_index < max_nodes_per_level);
     // in this case, we want an error also in Release builds
     if (new_task_index >= max_nodes_per_level)
     {
       runtime_error();
     }
-    parent_indices[tree_level * max_nodes_per_level + new_task_index] = parent_node_index;
+    parent_indices()[tree_level * max_nodes_per_level + new_task_index] = parent_node_index;
     return new_task_index;
   }
 
@@ -297,17 +313,17 @@ public:
                unsigned int active_thread_count)
   {
     assert(tree_level < levels);
-    assert(active_thread_count <= open_node_count[tree_level]);
+    assert(active_thread_count <= open_node_count()[tree_level]);
     assert(old_index ==
-           open_node_count[tree_level] - active_thread_count + cooperative_group.thread_rank());
-    assert(tree_level + 1 == levels || open_node_count[tree_level + 1] == 0);
+           open_node_count()[tree_level] - active_thread_count + cooperative_group.thread_rank());
+    assert(tree_level + 1 == levels || open_node_count()[tree_level + 1] == 0);
 
     unsigned int kept_tasks = 0;
     const bool is_active =
         keep_this_thread_task && cooperative_group.thread_rank() < active_thread_count;
     const unsigned int new_offset =
         prefix_counter.prefix_count(cooperative_group, is_active, kept_tasks);
-    const unsigned int new_index = new_offset + open_node_count[tree_level] - active_thread_count;
+    const unsigned int new_index = new_offset + open_node_count()[tree_level] - active_thread_count;
 
     enumi coefficients_tmp[dimensions_per_level];
     enumf center_partsum_tmp[dimensions];
@@ -315,17 +331,17 @@ public:
     unsigned int parent_index_tmp;
     if (is_active)
     {
-      partdist_tmp     = partdist[tree_level * max_nodes_per_level + old_index];
-      parent_index_tmp = parent_indices[tree_level * max_nodes_per_level + old_index];
+      partdist_tmp     = partdist()[tree_level * max_nodes_per_level + old_index];
+      parent_index_tmp = parent_indices()[tree_level * max_nodes_per_level + old_index];
       for (unsigned int i = 0; i < dimensions_per_level; ++i)
       {
         coefficients_tmp[i] =
-            enumeration_x[tree_level * dimensions_per_level * max_nodes_per_level +
+            enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                           i * max_nodes_per_level + old_index];
       }
       for (unsigned int i = 0; i < dimensions; ++i)
       {
-        center_partsum_tmp[i] = center_partsum[tree_level * dimensions * max_nodes_per_level +
+        center_partsum_tmp[i] = center_partsum()[tree_level * dimensions * max_nodes_per_level +
                                                i * max_nodes_per_level + old_index];
       }
     }
@@ -334,23 +350,23 @@ public:
 
     if (is_active)
     {
-      partdist[tree_level * max_nodes_per_level + new_index]       = partdist_tmp;
-      parent_indices[tree_level * max_nodes_per_level + new_index] = parent_index_tmp;
+      partdist()[tree_level * max_nodes_per_level + new_index]       = partdist_tmp;
+      parent_indices()[tree_level * max_nodes_per_level + new_index] = parent_index_tmp;
       for (unsigned int i = 0; i < dimensions_per_level; ++i)
       {
-        enumeration_x[tree_level * dimensions_per_level * max_nodes_per_level +
+        enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                       i * max_nodes_per_level + new_index] = coefficients_tmp[i];
       }
       for (unsigned int i = 0; i < dimensions; ++i)
       {
-        center_partsum[tree_level * dimensions * max_nodes_per_level + i * max_nodes_per_level +
+        center_partsum()[tree_level * dimensions * max_nodes_per_level + i * max_nodes_per_level +
                        new_index] = center_partsum_tmp[i];
       }
     }
 
     if (cooperative_group.thread_rank() == 0)
     {
-      open_node_count[tree_level] -= active_thread_count - kept_tasks;
+      open_node_count()[tree_level] -= active_thread_count - kept_tasks;
     }
   }
 };
@@ -366,7 +382,7 @@ struct ProcessLeafCallback
   Matrix mu;
   const enumi *start_points;
   uint32_t *radius_squared_location;
-  SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer;
+  SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer;
 
   __device__ __host__ void operator()(const enumi *x, enumf squared_norm);
 };
@@ -410,7 +426,7 @@ struct AddToTreeCallback
   unsigned int level;
   unsigned int parent_index;
   Matrix mu;
-  SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer;
+  SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer;
 
   __device__ __host__ void operator()(const enumi *x, enumf squared_norm);
 };
@@ -461,7 +477,7 @@ template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
           unsigned int max_nodes_per_level>
 __device__ __host__ inline void
 init_new_nodes(CG &group, unsigned int level, unsigned int already_calculated_node_count,
-               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer,
+               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
                Matrix mu, PerfCounter &counter)
 {
   for (unsigned int new_index = already_calculated_node_count + group.thread_rank();
@@ -554,7 +570,7 @@ init_new_nodes(CG &group, unsigned int level, unsigned int already_calculated_no
 template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
           unsigned int max_nodes_per_level>
 __device__ __host__ void generate_nodes_children(
-    CG &group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer,
+    CG &group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
     int level, Matrix mu, const enumf *rdiag, uint32_t *radius_squared_location,
     unsigned int max_subtree_paths, PerfCounter &counter)
 {
@@ -606,7 +622,7 @@ __device__ __host__ void generate_nodes_children(
 template <typename CG, typename eval_sol_fn, unsigned int levels, unsigned int dimensions_per_level,
           unsigned int max_nodes_per_level>
 __device__ __host__ void inline process_leaf_nodes(
-    CG &group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer,
+    CG &group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
     Matrix mu, const enumf *rdiag, uint32_t *radius_squared_location, unsigned int max_paths,
     eval_sol_fn &process_sol, const enumi *start_points, unsigned int start_point_dim,
     PerfCounter &node_counter)
@@ -642,7 +658,7 @@ template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
           unsigned int max_nodes_per_level>
 __device__ __host__ inline unsigned int get_done_node_count(
     CG &group, unsigned int *shared_counter,
-    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer, int level,
+    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
     Matrix mu, const enumf *rdiag, const uint32_t *radius_square_location)
 {
   const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
@@ -683,7 +699,7 @@ template <typename CG, unsigned int block_size, unsigned int levels,
           unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
 __device__ __host__ inline void remove_done_nodes(
     CG &group, PrefixCounter<CG, block_size> &prefix_counter,
-    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer, int level,
+    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
     Matrix mu, const enumf *rdiag, const uint32_t *radius_square_location)
 {
   const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
@@ -721,7 +737,7 @@ template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
           unsigned int max_nodes_per_level>
 __device__ __host__ inline void generate_level_children(
     CG &group, unsigned int *shared_counter,
-    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer, int level,
+    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
     Matrix mu, const enumf *rdiag, uint32_t *radius_square_location, PerfCounter counter,
     StrategyOpts opts)
 {
@@ -761,7 +777,7 @@ template <typename CG, unsigned int block_size, typename eval_sol_fn, unsigned i
           unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
 __device__ __host__ inline void process_leaf_level(
     CG &group, PrefixCounter<CG, block_size> &prefix_counter,
-    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer, Matrix mu,
+    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, Matrix mu,
     const enumf *rdiag, uint32_t *radius_square_location, PerfCounter node_counter,
     eval_sol_fn &process_sol, const enumi *start_points, unsigned int start_point_dim,
     StrategyOpts opts)
@@ -784,7 +800,7 @@ template <typename CG, unsigned int block_size, unsigned int levels,
           unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
 __device__ __host__ inline void cleanup_parent_level(
     CG &group, PrefixCounter<CG, block_size> &prefix_counter,
-    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer, int level,
+    SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
     Matrix mu, const enumf *rdiag, uint32_t *radius_square_location)
 {
   if (level > 0)
@@ -808,7 +824,7 @@ template <typename CG, unsigned int block_size, typename eval_sol_fn, unsigned i
           unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
 __device__ __host__ inline void
 clear_level(CG &group, PrefixCounter<CG, block_size> &prefix_counter, unsigned int *shared_counter,
-            SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> &buffer,
+            SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
             int level, Matrix mu, const enumf *rdiag, uint32_t *radius_square_location,
             eval_sol_fn &process_sol, const enumi *start_points, unsigned int start_point_dim,
             StrategyOpts opts, PerfCounter node_counter)

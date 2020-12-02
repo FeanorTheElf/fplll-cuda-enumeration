@@ -79,7 +79,7 @@ inline std::vector<uint64_t> search_enumeration_choose_dims_per_level(
   return search_enumeration_choose_levels(mu, rdiag, enum_levels, start_point_coefficients,
                                    start_point_count, start_point_dim, initial_radius, evaluator,
                                    enum_opts, int_marker<dimensions_per_level>(), int_marker<1>(),
-                                   int_marker<cudaenum_max_levels - 1>());
+                                   int_marker<cudaenum_max_levels(dimensions_per_level) - 1>());
 }
 
 template <int min_dimensions_per_level, int delta_dimensions_per_level>

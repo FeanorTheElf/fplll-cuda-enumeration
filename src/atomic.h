@@ -1,5 +1,5 @@
-#ifndef FPLLL_ATOMIC_CUH
-#define FPLLL_ATOMIC_CUH
+#ifndef FPLLL_CUDA_ATOMIC_CUH
+#define FPLLL_CUDA_ATOMIC_CUH
 
 /**
  * Defines utility functions performing atomic operations.

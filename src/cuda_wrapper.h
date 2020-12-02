@@ -1,5 +1,5 @@
-#ifndef FPLLL_CUDA_ENUM
-#define FPLLL_CUDA_ENUM
+#ifndef FPLLL_CUDA_WRAPPER_H
+#define FPLLL_CUDA_WRAPPER_H
 
 /**
  * Adapter that wraps the heavily templated cuda enumeration functionality

@@ -584,8 +584,9 @@ __device__ __host__ void generate_nodes_children(
       typedef AddToTreeCallback<levels, dimensions_per_level, max_nodes_per_level> CallbackType;
       CallbackType callback = {static_cast<unsigned int>(level + 1), index, mu, buffer};
       PerfCounter offset_counter = counter.offset_level(offset_kk);
-      enumeration.template enumerate_recursive(
-          callback, max_paths, offset_counter, kk_marker<dimensions_per_level - 1>(), CoefficientIterator());
+      CoefficientIterator iter;
+      enumeration.enumerate_recursive(
+          callback, max_paths, offset_counter, kk_marker<dimensions_per_level - 1>(), iter);
 
       buffer.set_enumeration(level, index, enumeration);
     }
@@ -625,8 +626,9 @@ __device__ __host__ void inline process_leaf_nodes(
         CallbackT;
     CallbackT callback = {level + 1, index,        start_point_dim,         process_sol,
                           mu,        start_points, radius_squared_location, buffer};
-    enumeration.template enumerate_recursive(
-        callback, max_paths, node_counter, kk_marker<dimensions_per_level - 1>(), CoefficientIterator());
+    CoefficientIterator iter;
+    enumeration.enumerate_recursive(
+        callback, max_paths, node_counter, kk_marker<dimensions_per_level - 1>(), iter);
 
     buffer.set_enumeration(level, index, enumeration);
   }

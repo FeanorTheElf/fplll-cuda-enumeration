@@ -75,6 +75,7 @@ class PointStreamEndpoint {
   unsigned int evaluator_count;
   unsigned int point_dimension;
   PinnedPtr<unsigned char> host_memory;
+  PinnedPtr<uint32_t> enum_bound_mem;
   std::vector<std::unique_ptr<unsigned int[]>> last_has_written_round;
   CudaStream stream;
 
@@ -98,7 +99,8 @@ public:
       point_dimension(point_dimension),
       device_enumeration_bound_location(device_enumeration_bound_location),
       device_memory(device_memory),
-      host_memory(alloc_pinned_memory<unsigned char>(evaluator_count * PointStreamEvaluator<buffer_size>::memory_size_in_bytes(point_dimension)))
+      host_memory(alloc_pinned_memory<unsigned char>(evaluator_count * PointStreamEvaluator<buffer_size>::memory_size_in_bytes(point_dimension))),
+      enum_bound_mem(alloc_pinned_memory<uint32_t>(1))
     {
         const unsigned int used_device = 0;
         cudaDeviceProp deviceProp;
@@ -147,16 +149,21 @@ public:
                     enumf evaluator_enum_bound = callback(norm_square, x);
                     new_enumeration_bound = std::min<float>(evaluator_enum_bound, new_enumeration_bound);
                 } else {
+                    if (print_status) {
+                        std::cout << "Buffer not big enough, block " << i << " stored " << (new_written_count - last_written_count) << " points at index " << j << std::endl;
+                    }
                     throw "buffer not big enough to hold all solution points found between two queries";
                 }
             }
         }
         if (point_count > 0) {
-            uint32_t enumeration_bound_encoded = float_to_int_order_preserving_bijection(new_enumeration_bound);
-            check(cudaMemcpyAsync(device_enumeration_bound_location, &enumeration_bound_encoded, sizeof(uint32_t), cudaMemcpyHostToDevice, stream.get()));
+            *enum_bound_mem = float_to_int_order_preserving_bijection(new_enumeration_bound);
+            check(cudaStreamSynchronize(stream.get()));
+            check(cudaMemcpyAsync(device_enumeration_bound_location, enum_bound_mem.get(), sizeof(uint32_t), cudaMemcpyHostToDevice, stream.get()));
             if (print_status) {
                 std::cout << "Got " << point_count << " new solution points and can decrease enum bound to " << new_enumeration_bound << std::endl;
             }
+            check(cudaStreamSynchronize(stream.get()));
         }
     } 
 

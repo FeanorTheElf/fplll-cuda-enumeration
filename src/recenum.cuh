@@ -19,7 +19,7 @@ template <int kk> struct kk_marker
 
 struct CoefficientIterator {
   
-  __device__ __host__ constexpr inline enumi operator()(enumi last_coeff, const enumf center)
+  __device__ __host__ inline enumi operator()(enumi last_coeff, const enumf center)
   {
     const enumi rounded_center = static_cast<enumi>(round(center));
     last_coeff                 = 2 * rounded_center - last_coeff;
@@ -87,7 +87,7 @@ public:
                                                PerfCounter &counter,
                                                kk_marker<0>, CoeffIt);
 
-  template <int kk, typename Callback, typename CoeffIt>
+  template <typename Callback, typename CoeffIt, int kk>
   __device__ __host__ bool enumerate_recursive(Callback &callback, unsigned int &max_paths,
                                                PerfCounter &counter,
                                                kk_marker<kk>, CoeffIt);
@@ -127,7 +127,7 @@ __device__ __host__ inline bool CudaEnumeration<maxdim>::is_enumeration_done() c
  * Adjustment of enumerate_recursive() in enumerate_base.cpp of fplll
  */
 template <unsigned int maxdim>
-template <int kk, typename Callback, typename CoeffIt>
+template <typename Callback, typename CoeffIt, int kk>
 __device__ __host__ inline bool
 CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &max_paths,
                                              PerfCounter &node_counter, kk_marker<kk>, CoeffIt next_coeff)

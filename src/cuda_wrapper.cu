@@ -137,7 +137,7 @@ inline void recenum_choose_template_instance(
   unsigned int max_paths = std::numeric_limits<unsigned int>::max();
   PerfCounter node_counter(nodes);
   FnWrapper<const enumi*, enumf> wrapped_callback(callback);
-  enumeration.template enumerate_recursive<dims - 1, FnWrapper<const enumi*, enumf>, PositiveCoefficientIterator>(wrapped_callback, max_paths, node_counter, kk_marker<dims - 1>(), PositiveCoefficientIterator());
+  enumeration.template enumerate_recursive<FnWrapper<const enumi*, enumf>, PositiveCoefficientIterator, dims - 1>(wrapped_callback, max_paths, node_counter, kk_marker<dims - 1>(), PositiveCoefficientIterator());
 }
 
 template<unsigned int max_dim, int min_dim, int delta_dim>

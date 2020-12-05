@@ -1,3 +1,16 @@
+/*
+   (C) 2020 Simon Pohmann.
+   This file is part of fplll. fplll is free software: you
+   can redistribute it and/or modify it under the terms of the GNU Lesser
+   General Public License as published by the Free Software Foundation,
+   either version 2.1 of the License, or (at your option) any later version.
+   fplll is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+   GNU Lesser General Public License for more details.
+   You should have received a copy of the GNU Lesser General Public License
+   along with fplll. If not, see <http://www.gnu.org/licenses/>. */
+
 #ifndef FPLLL_ENUM_CUH
 #define FPLLL_ENUM_CUH
 
@@ -601,8 +614,10 @@ __device__ __host__ void generate_nodes_children(
       CallbackType callback = {static_cast<unsigned int>(level + 1), index, mu, buffer};
       PerfCounter offset_counter = counter.offset_level(offset_kk);
       CoefficientIterator iter;
+      FROM(x);
       enumeration.enumerate_recursive(
           callback, max_paths, offset_counter, kk_marker<dimensions_per_level - 1>(), iter);
+      TO(x);
 
       buffer.set_enumeration(level, index, enumeration);
     }
@@ -1029,6 +1044,13 @@ std::vector<uint64_t> enumerate(const enumf *mu, const enumf *rdiag, const enumi
   const uint32_t repr_initial_radius_squared =
       float_to_int_order_preserving_bijection(initial_radius * initial_radius);
 
+  {
+
+      unsigned long long hperf;
+      cudaMemcpyFromSymbol(&hperf, perf, sizeof(unsigned long long), 0, cudaMemcpyDeviceToHost);
+      std::cout << "profiling counter " << hperf << std::endl;
+  }
+
   CudaPtr<unsigned char> buffer_mem =
       cuda_alloc(unsigned char, SubtreeBuffer::memory_size_in_bytes * group_count);
   CudaPtr<unsigned char> point_stream_memory = 
@@ -1086,7 +1108,11 @@ std::vector<uint64_t> enumerate(const enumf *mu, const enumf *rdiag, const enumi
   std::array<uint64_t, tree_dimensions> searched_nodes;
   check(cudaMemcpy(&searched_nodes[0], node_counter.get(), tree_dimensions * sizeof(uint64_t),
                    cudaMemcpyDeviceToHost));
-  
+
+  unsigned long long hperf;
+  cudaMemcpyFromSymbol(&hperf, perf, sizeof(unsigned long long), 0, cudaMemcpyDeviceToHost);
+  std::cout << "profiling counter " << hperf << std::endl;
+
   if (print_status)
   {
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();

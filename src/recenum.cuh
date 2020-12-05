@@ -1,3 +1,16 @@
+/*
+   (C) 2020 Simon Pohmann.
+   This file is part of fplll. fplll is free software: you
+   can redistribute it and/or modify it under the terms of the GNU Lesser
+   General Public License as published by the Free Software Foundation,
+   either version 2.1 of the License, or (at your option) any later version.
+   fplll is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+   GNU Lesser General Public License for more details.
+   You should have received a copy of the GNU Lesser General Public License
+   along with fplll. If not, see <http://www.gnu.org/licenses/>. */
+
 #ifndef FPLLL_RECENUM_CUH
 #define FPLLL_RECENUM_CUH
 
@@ -25,16 +38,15 @@ struct CoefficientIterator {
       return last_coeff + 1;
     }
     else {
-      const enumi rounded_center = static_cast<enumi>(round(center));
-      last_coeff = 2 * rounded_center - last_coeff;
-      if (center >= rounded_center)
-      {
-        return last_coeff + static_cast<int>(last_coeff >= rounded_center);
-      }
-      else
-      {
-        return last_coeff - static_cast<int>(last_coeff <= rounded_center);
-      }
+        const double rounded_center = static_cast<double>(round(center));
+        double mirrored_coeff = 2 * rounded_center - last_coeff;
+        bool c1 = center >= rounded_center;
+        bool c2 = last_coeff <= rounded_center;
+        int delta = static_cast<int>(c1 == c2 || last_coeff == rounded_center);
+        if (!c1) {
+            delta = -delta;
+        }
+        return mirrored_coeff + delta;
     }
   }
 
@@ -146,6 +158,7 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
 
   partdist[kk - 1] = newdist;
 
+#pragma unroll
   for (int j = 0; j < kk; ++j)
   {
     center_partsums[j][kk - 1] = center_partsums[j][kk] - x[kk] * mu.at(j, kk);

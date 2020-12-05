@@ -1,3 +1,16 @@
+/*
+   (C) 2020 Simon Pohmann.
+   This file is part of fplll. fplll is free software: you
+   can redistribute it and/or modify it under the terms of the GNU Lesser
+   General Public License as published by the Free Software Foundation,
+   either version 2.1 of the License, or (at your option) any later version.
+   fplll is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+   GNU Lesser General Public License for more details.
+   You should have received a copy of the GNU Lesser General Public License
+   along with fplll. If not, see <http://www.gnu.org/licenses/>. */
+
 #ifndef FPLLL_TYPES_CUH
 #define FPLLL_TYPES_CUH
 
@@ -46,5 +59,24 @@ struct PerfCounter
     return PerfCounter(&counter[start_level]);
   }
 };
+
+__device__ unsigned long long perf[1] = { 0 };
+
+__device__ __host__ inline unsigned long long from() {
+#ifdef __CUDA_ARCH__
+    return clock64();
+#else
+    return 0;
+#endif
+}
+
+__device__ __host__ inline void to(unsigned long long x) {
+#ifdef __CUDA_ARCH__
+    atomicAdd(&perf[0], clock64() - x);
+#endif
+}
+
+#define FROM(x) unsigned long long x = from();
+#define TO(x) to(x);
 
 #endif

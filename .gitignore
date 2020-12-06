@@ -1,6 +1,7 @@
 *.o
 a.out
 libcudaenum.so
+cudaenum_test
 x64
 *.vcxproj.user
 *.vcxproj.filters

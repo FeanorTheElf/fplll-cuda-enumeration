@@ -7,7 +7,7 @@ endif
 NVCC?=nvcc
 CXX?=g++
 
-DBG_FLAGS=-g -G -O0 -D DEBUG
+DBG_FLAGS=-g -G -O0 -D NDEBUG
 RLS_FLAGS=-O3 -D NDEBUG
 SRC=src/cuda_wrapper.cu
 TEST_SRC=$(SRC) src/test.cpp src/testdata.cpp
@@ -27,5 +27,5 @@ test: dbg
 lib:
 	$(NVCC) -ccbin $(CXX) --compiler-options -fPIC --shared $(RLS_FLAGS) $(SRC) -o libcudaenum.so
 
-dbg_lib:
+dbglib:
 	$(NVCC) -ccbin $(CXX) --compiler-options -fPIC --shared $(DBG_FLAGS) $(SRC) -o libcudaenum.so

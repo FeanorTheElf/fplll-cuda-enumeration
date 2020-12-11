@@ -508,7 +508,7 @@ init_new_nodes(CG &group, unsigned int level, unsigned int already_calculated_no
 
     // sets center_partsum[i] = parent_center_partsum[i] + calc_center_partsum_delta(..., i)
     // to reduce latency, the loop is transformed as to load data now that is needed after some loop
-    // cycles
+    // cycles (-> software pipelining)
     constexpr unsigned int loop_preload_count  = 3;
     constexpr unsigned int loop_preload_offset = loop_preload_count - 1;
     unsigned int i                             = 0;
@@ -614,10 +614,8 @@ __device__ __host__ void generate_nodes_children(
       CallbackType callback = {static_cast<unsigned int>(level + 1), index, mu, buffer};
       PerfCounter offset_counter = counter.offset_level(offset_kk);
       CoefficientIterator iter;
-      FROM(x);
       enumeration.enumerate_recursive(
           callback, max_paths, offset_counter, kk_marker<dimensions_per_level - 1>(), iter);
-      TO(x);
 
       buffer.set_enumeration(level, index, enumeration);
     }
@@ -1044,12 +1042,6 @@ std::vector<uint64_t> enumerate(const enumf *mu, const enumf *rdiag, const enumi
   const uint32_t repr_initial_radius_squared =
       float_to_int_order_preserving_bijection(initial_radius * initial_radius);
 
-  {
-
-      unsigned long long hperf;
-      cudaMemcpyFromSymbol(&hperf, perf, sizeof(unsigned long long), 0, cudaMemcpyDeviceToHost);
-      std::cout << "profiling counter " << hperf << std::endl;
-  }
 
   CudaPtr<unsigned char> buffer_mem =
       cuda_alloc(unsigned char, SubtreeBuffer::memory_size_in_bytes * group_count);
@@ -1080,6 +1072,8 @@ std::vector<uint64_t> enumerate(const enumf *mu, const enumf *rdiag, const enumi
   check(cudaStreamCreate(&raw_exec_stream));
   CudaStream exec_stream(raw_exec_stream);
 
+  reset_profiling_counter();
+
   if (print_status)
   {
     std::cout << "Enumerating " << (levels * dimensions_per_level)
@@ -1109,10 +1103,6 @@ std::vector<uint64_t> enumerate(const enumf *mu, const enumf *rdiag, const enumi
   check(cudaMemcpy(&searched_nodes[0], node_counter.get(), tree_dimensions * sizeof(uint64_t),
                    cudaMemcpyDeviceToHost));
 
-  unsigned long long hperf;
-  cudaMemcpyFromSymbol(&hperf, perf, sizeof(unsigned long long), 0, cudaMemcpyDeviceToHost);
-  std::cout << "profiling counter " << hperf << std::endl;
-
   if (print_status)
   {
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -1127,6 +1117,8 @@ std::vector<uint64_t> enumerate(const enumf *mu, const enumf *rdiag, const enumi
               << " tree nodes, and decreased enumeration bound down to "
               << sqrt(int_to_float_order_preserving_bijection(result_radius)) << std::endl;
   }
+  print_profiling_counter();
+
   return std::vector<uint64_t>(searched_nodes.begin(), searched_nodes.end());
 }
 

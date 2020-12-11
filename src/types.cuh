@@ -76,6 +76,17 @@ __device__ __host__ inline void to(unsigned long long x) {
 #endif
 }
 
+__host__ inline void reset_profiling_counter() {
+    const unsigned long long zero = 0;
+    cudaMemcpyToSymbol(perf, &zero, sizeof(unsigned long long), 0, cudaMemcpyHostToDevice);
+}
+
+__host__ inline void print_profiling_counter() {
+    unsigned long long hperf;
+    cudaMemcpyFromSymbol(&hperf, perf, sizeof(unsigned long long), 0, cudaMemcpyDeviceToHost);
+    std::cout << "profiling counter " << (hperf / 1e9) << " Gcycles" << std::endl;
+}
+
 #define FROM(x) unsigned long long x = from();
 #define TO(x) to(x);
 

@@ -47,6 +47,10 @@ class PointStreamEvaluator
   unsigned int* write_to_index;
   unsigned int point_index;
   
+  __device__ __host__ constexpr static unsigned int used_memory_size_in_bytes(unsigned int point_dimension) {
+    return sizeof(enumi) * buffer_size * point_dimension + (sizeof(enumf) + sizeof(unsigned int)) * buffer_size;
+  }
+
 public:
   
   __device__ __host__ inline PointStreamEvaluator(unsigned char* memory, unsigned int* write_to_index)
@@ -58,9 +62,8 @@ public:
   }
  
   __device__ __host__ constexpr static unsigned int memory_size_in_bytes(unsigned int point_dimension) {
-    unsigned int real_size = sizeof(enumi) * buffer_size * point_dimension + (sizeof(enumf) + sizeof(unsigned int)) * buffer_size;
     // ensure alignment
-    return ((real_size - 1) / sizeof(enumf) + 1) * sizeof(enumf);
+    return ((used_memory_size_in_bytes(point_dimension) - 1) / sizeof(enumf) + 1) * sizeof(enumf);
   }
 
   __device__ __host__ inline void operator()(enumi x, unsigned int coordinate, enumf norm_square,

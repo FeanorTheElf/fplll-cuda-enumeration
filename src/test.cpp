@@ -15,6 +15,7 @@
 #include <functional>
 #include <vector>
 #include <memory>
+#include <cmath>
 
 #include "cuda_wrapper.h"
 #include "atomic.h"
@@ -35,7 +36,7 @@ float find_initial_radius(const float* lattice, size_t n) {
         }
         result = std::min(norm_squared, result);
     }
-    return sqrt(result);
+    return std::sqrt(result);
 }
 
 float find_initial_radius(const float* mu, const float* rdiag, size_t n) {
@@ -47,7 +48,7 @@ float find_initial_radius(const float* mu, const float* rdiag, size_t n) {
         }
         result = std::min(norm_squared, result);
     }
-    return sqrt(result);
+    return std::sqrt(result);
 }
 
 void set_lattice_config(const float* lattice, double* mu, size_t mudim, bool mutranspose, double* rdiag, double* pruning) {

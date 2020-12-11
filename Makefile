@@ -8,7 +8,7 @@ NVCC?=nvcc
 CXX?=g++
 
 NVCC_FLAGS=--std=c++11
-DBG_FLAGS=-g -G -O0 -D DEBUG
+DBG_FLAGS=-g -G -O0 -D NDEBUG
 RLS_FLAGS=-O3 -D NDEBUG
 SRC=src/cuda_wrapper.cu
 TEST_SRC=$(SRC) src/test.cpp src/testdata.cpp
@@ -28,5 +28,10 @@ test: dbg
 lib:
 	$(NVCC) -ccbin $(CXX) --compiler-options -fPIC --shared $(NVCC_FLAGS) $(RLS_FLAGS) $(SRC) -o libcudaenum.so
 
+<<<<<<< HEAD
 dbg_lib:
 	$(NVCC) -ccbin $(CXX) --compiler-options -fPIC --shared $(NVCC_FLAGS) $(DBG_FLAGS) $(SRC) -o libcudaenum.so
+=======
+dbglib:
+	$(NVCC) -ccbin $(CXX) --compiler-options -fPIC --shared $(DBG_FLAGS) $(SRC) -o libcudaenum.so
+>>>>>>> 633b88d88608bd6f6939d6c952ec7d9ddf1e6869

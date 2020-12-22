@@ -1,0 +1,163 @@
+\documentclass{scrartcl}
+
+\usepackage{pgfplots}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{hyperref}
+
+\title{Enumeration on GPU for fplll}
+\author{Marc Stevens, Simon Pohmann, Jens Zumbrägel}
+
+\pgfplotsset{
+    discard if not/.style 2 args={
+        x filter/.code={
+            \edef\tempa{\thisrow{#1}}
+            \edef\tempb{#2}
+            \ifx\tempa\tempb
+            \else
+                \def\pgfmathresult{inf}
+            \fi
+        }
+    }
+}
+
+\newcommand{\Z}{\mathbb{Z}}
+
+\begin{document}
+    \maketitle
+
+    \section{Approach}
+
+    \subsection{Lattice Enumeration}
+
+    Given an $n$-dimensional lattice $L$ with basis $b_1, ..., b_n$, consider the projections $\pi_k$ into the space $\langle b_1, ..., b_k \rangle^\perp$. Then the idea of lattice enumeration is to begin with the origin $0 \in \pi_n L = \{ 0 \}$ and repeatedly expand points of norm $\leq r$ in $\pi_{k + 1} L$ to multiple points of norm $\leq r$ in $\pi_k L$.
+    
+    For $p \in \pi_{k + 1} L$ of norm $\| p \| \leq r$ we call all points $p' \in \pi_k L$ of norm $\| p' \| \leq r$ with $\pi_{k + 1} p' = p$ the children of $p$. As the projections do not increase the norm of vectors, have that for $p \in \pi_k$ with norm $\| p \| \leq r$, also $\pi_{k + 1} p \in \pi_{k + 1}L$ is of norm $\leq r$. Therefore, considering the children of each point in $\pi_{k + 1}L$ of norm $\leq r$ yield exactly all points in $\pi_k L$ of norm $\leq r$.
+
+    As the use of ``children'' already indicates, this defines a tree, the enumeration tree, with root $0$ in which each maximal path has length $n + 1$, where the leaf nodes are exactly all lattice points of norm $\leq r$.
+    This tree is then searched with a depth-first strategy, and the shortest nonzero leaf node is returned.
+
+    Therefore, the fundamental operation of the algorithm is the calculation of all children points. Usually, instead of storing the points $p \in \pi_k L$, the coefficients w.r.t $\pi_k b_i$ are stored. In this case, on tree level $n - k$, each point $p \in \pi_k L$ has a representation $p = \pi_k \sum_{i = k + 1}^n x_i b_i , \ x_i \in \Z$, so the coefficients for $b_1, ..., b_k$ are zero. It follows that the children $p'$ of a point $p = \pi_k \sum_{i = k + 1}^n x_i b_i$ are characterized by their coefficient $x_k$, so they are of the form
+    
+    \begin{equation*}
+        p' = \pi_{k - 1}\sum_{i = k}^n x_i b_i \quad \text{where} \ \left|\|b_k^*\|x_k + \sum_{i = k + 1}^n x_i \mu_{ki} \right| \leq \sqrt{r^2 - \|p\|^2}, \ x_k \in \Z
+    \end{equation*}
+    which can be easily seen by calculating $\|p'\|$
+    \begin{align*}
+        \|p'\| = &\| \pi_{k - 1}\sum_{i = k}^n x_i b_i \|^2 = \left(\frac 1 {\langle b_k^*, b_k^* \rangle} \langle b_k^*, \sum_{i = k}^n x_i b_i \rangle \right)^2 + \| \pi_k \sum_{i = k}^n x_i b_i \|^2 \\
+        = &\left( \sum_{i = k}^n x_i\mu_{ki} \right)^2 + \| \pi_k \sum_{i = k + 1}^n x_i b_i \|^2 = \| p \|^2 + \left( x_k\|b_k^*\| + \sum_{i = k + 1}^n x_i \mu_{ki} \right)^2
+    \end{align*}
+    Iterating over all children is therefore equivalent to iterate over all integers $x_k$ between
+    \begin{equation*}
+        -\sum_{i = k + 1}^n x_i \mu_{ki} - \sqrt{r^2 - \|p\|^2} \ \leq \ x_k \ \leq \ -\sum_{i = k + 1}^n x_i \mu_{ki} + \sqrt{r^2 - \|p\|^2}
+    \end{equation*}
+
+    \subsubsection{The partial center sums}
+
+    \label{sec:center_partsums}
+    The real work is therefore calculating this sum $\sum_{i = k + 1}^n c_i \mu_{ki}$, often called \texttt{center} as it is the center of the interval from which to choose $c$. By keeping track of all the partial sums $\sum_{i=k}^n c_i \mu_{li}$ for $l < k$, the center is always available, and updating the partial sums requires $n - k$ multiplications on tree level $n - k$.
+
+    \subsubsection{Decrease enumeration bound}
+
+    \label{sec:enum_bound}
+    When finding any leaf node in the enumeration tree, this node corresponds to a lattice point $x \in L$. If $x \neq 0$, we know that there is a lattice point of norm $\leq \|x\|$ in the lattice, so to find the shortest one, it suffices now to search only the points of norm $\leq \|x\|$. In other word, we can potentially decrease the enumeration bound $r$ by $r := \min \{ r, \|x\| \}$ (there is some complication because of rounding errors during floating point arithmetic, see ToDo), which can significantly reduce the size of the tree. Therefore, finding leaf nodes as early as possible is important for a fast algorithm.
+
+    The basic algorithm therefore looks like this
+
+    \begin{algorithm}[H]
+        \caption{Find tree node children \label{alg:children_iter}\\Input: parent coefficients $x_{k + 1}, ..., x_n$, parent norm $\|p\|^2$, partial center sums $\sum_i x_i \mu_{li}$ for $l < k$, matrix $(\mu_{ij})$}
+        \begin{algorithmic}
+            \STATE Set $\mathrm{center} := \sum_{i = k + 1}^n c_i \mu_{ij}$
+            \STATE Set $x_0 = \lfloor \mathrm{center} \rceil$
+            \STATE Set $\delta = 1$ if $\mathrm{center} \geq x_0$, otherwise $\delta = -1$
+            \FORALL{$x \in \{ x_0, x_0 + \delta, x_0 - \delta, x_0 + 2\delta, ... \}$}
+                \STATE If $|x - x_0|^2 > r^2 - \| p \|^2$, exit
+                \STATE Otherwise, yield the point $p'$ with coefficients $(x, x_{k + 1}, ..., x_n)$ and norm $\|p'\|^2 = \|p\|^2 + (x - \mathrm{center})^2 \|b_k^*\|^2$
+            \ENDFOR
+        \end{algorithmic}
+    \end{algorithm}
+
+    \subsection{The CUDA programming model}
+
+    ToDo
+
+    \subsection{Parallelization of the Lattice Enumeration}
+
+    The main difficulty of implementing the enumeration algorithm efficiently on GPUs is the fact that nodes in the enumeration tree have greatly varying degree, so subtrees may have completely different size and structure. This introduces a lot of branching and makes it hard to evenly distribute work on the threads.
+
+    These problems especially occur in the following, ``naive'' approach: Enumerate all points on a certain tree level on the host, and then assign each GPU thread one of these points and let them enumerate the corresponding subtree.
+    Nevertheless, this is still the main idea of our approach. However, we try to counter the problems by assigning a subtree not to a thread, but to a warp and using a work-stealing queue to distribute work among warps.
+
+    \subsection{Subtree enumeration within a warp}
+
+    The main idea for the thread cooperation within a warp is to let every thread expand the children of an assigned node, but not recurse into the corresponding subtrees. Instead, all the created new children nodes are then written to memory and are assigned to potentially different threads in the next step.
+
+    This prevents threads whose subtrees have different size to diverge and having to wait for the longer one. Additionally, having a list of nodes whose subtrees must still be searched also allows us to pick nodes that will be processed in the next step. This way, we ensure that all threads always work on nodes on the same tree level, which allows coalesced memory access, given a correct memory layout of the data.
+
+    The caveat of this approach is of course that it requires frequent memory accesses to load/store the tree nodes. The latency introduced by this is the main factor limiting performance. To at least reduce it, we apply the node shuffling not at each tree level, but only at every $k$-th tree level, for a constant $k$ (in experiments, $k = 3$ has yielded the best results).
+    In some more detail, this is described in \ref{alg:warp_enum}. For finding the coefficients of the points $\mathrm{children}^k(\{x_i\})$ in the algorithm, an adaption of the efficient (but branching) recursive enumeration procedure from fplll is used. It also uses the previously calculated partial center sum values (see \ref{sec:center_partsums}).
+
+    \begin{algorithm}[H]
+        \caption{Intra-warp enumeration \label{alg:warp_enum}\\Input: subtree root $r$}
+        \begin{algorithmic}
+            \STATE Init buffer with single node $r$
+            \WHILE{node buffer is not empty}
+                \STATE $l$ := deepest tree level for which there are $\geq 32$ nodes
+                \STATE If such a $l$ does not exist, use highest level with $\neq 0$ nodes
+                \STATE Assign one node $x_i$ on level $l$ to each thread $i \in \{0, ..., 31\}$
+                \IF{$l$ is leaf level of enumeration tree}
+                    \STATE If $x_i$ is nonzero and shorter than the current optimal solution, update it
+                \ELSE
+                    \STATE Thread $i$ gets all transitive children points $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter}
+                    \STATE Store their coefficients and norms
+                    \STATE Calculate new partial center sums with a parallelized matrix-matrix multiplication
+                \ENDIF
+                \ENDWHILE
+        \end{algorithmic}
+    \end{algorithm}
+
+    \section{Performance}
+
+    % The running time of enumeration in general depends strongly on the structure of the enumeration tree, for example how short lattice vectors are distributed (see \ref{sec:enum_bound}).
+
+    The following benchmark was done on a machine with an Intel core i7-7700K CPU and a GeForce GTX 1080 Ti GPU. As a comparison for the CUDA implementation, we use the multithreaded enumeration algorithm from the fplll library.
+    For each dimension, four knapsack matrices with a uniform 350-bit column were used as lattice, and the graph shows the median of the running time of both implementations. The matrices can also be reproduced using the tool latticegen from the fplll library (via \texttt{latticegen -randseed \$s r \$dim 350} for $s \in \{0, 1, 2, 3\}$).
+    The results are displayed in figure \ref{fig:perf_graph}.
+
+    \begin{figure}[H]
+        \begin{tikzpicture}
+            \begin{axis}[
+                    %ymode=log,
+                    axis x line=center,
+                    axis y line=center,
+                    ylabel={ms},
+                    xlabel={dim},
+                    xmin=48,
+                    ymax=1.5e7,
+                    width=\textwidth
+                ]
+                
+                \addplot+[mark=none, discard if not={type}{cu-med}, red] table[x=dim, y=time] {performance.dat} node[above, pos=.7] {cuda};
+                \addplot+[mark=none, discard if not={type}{mt-med}, blue] table[x=dim, y=time] {performance.dat} node[left, pos=.88] {multithreaded};
+                \addplot+[dashed, mark=none, discard if not={type}{cu-fit}, red] table[x=dim, y=time] {performance.dat} node[below, pos=.6] {cuda (fit)};
+                \addplot+[dashed, mark=none, discard if not={type}{mt-fit}, blue] table[x=dim, y=time] {performance.dat} node[left, pos=.88] {multithreaded (fit)};
+            
+                \addplot+[only marks, red, mark=x, discard if not={type}{cu-0}] table[x=dim, y=time] {performance.dat};
+                \addplot+[only marks, red, mark=x, discard if not={type}{cu-1}] table[x=dim, y=time] {performance.dat};
+                \addplot+[only marks, red, mark=x, discard if not={type}{cu-2}] table[x=dim, y=time] {performance.dat};
+                \addplot+[only marks, red, mark=x, discard if not={type}{cu-3}] table[x=dim, y=time] {performance.dat};
+
+                \addplot+[only marks, blue, mark=x, discard if not={type}{mt-0}] table[x=dim, y=time] {performance.dat};
+                \addplot+[only marks, blue, mark=x, discard if not={type}{mt-1}] table[x=dim, y=time] {performance.dat};
+                \addplot+[only marks, blue, mark=x, discard if not={type}{mt-2}] table[x=dim, y=time] {performance.dat};
+                \addplot+[only marks, blue, mark=x, discard if not={type}{mt-3}] table[x=dim, y=time] {performance.dat};
+
+            \end{axis}
+        \end{tikzpicture}
+        \caption{Performance of cuda enumeration (red) and multithreaded enumeration (blue)\label{fig:perf_graph}; some data points are clipped}
+    \end{figure}
+
+\end{document}

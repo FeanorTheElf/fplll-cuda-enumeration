@@ -394,7 +394,6 @@
            eval_sol_fn& process_sol;
            Matrix mu;
            const enumi* start_points;
-           uint32_t* radius_squared_location;
            SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer;
    
            __device__ __host__ void operator()(const enumi* x, enumf squared_norm);
@@ -413,7 +412,7 @@
            const unsigned int total_point_dimension = dimensions_per_level * levels + start_point_dim;
            for (unsigned int i = 0; i < dimensions_per_level; ++i)
            {
-               process_sol(x[i], i, squared_norm, total_point_dimension, radius_squared_location);
+               process_sol(x[i], i, squared_norm, total_point_dimension);
            }
            unsigned int index = parent_index;
            for (unsigned int j = levels - 1; j > 0; --j)
@@ -421,7 +420,7 @@
                for (unsigned int i = 0; i < dimensions_per_level; ++i)
                {
                    process_sol(buffer.get_coefficient(j, index, i), i + (levels - j) * dimensions_per_level,
-                       squared_norm, total_point_dimension, radius_squared_location);
+                       squared_norm, total_point_dimension);
                }
                index = buffer.get_parent_index(j, index);
            }
@@ -429,7 +428,7 @@
            for (unsigned int i = 0; i < start_point_dim; ++i)
            {
                process_sol(start_points[index * start_point_dim + i], i + levels * dimensions_per_level,
-                   squared_norm, total_point_dimension, radius_squared_location);
+                   squared_norm, total_point_dimension);
            }
        }
    
@@ -584,7 +583,7 @@
            unsigned int max_nodes_per_level>
            __device__ __host__ void generate_nodes_children(
                CG& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
-               int level, Matrix mu, const enumf* rdiag, enumf* pruning_bounds,
+               int level, Matrix mu, const enumf* rdiag, const enumf* pruning_bounds,
                unsigned int max_subtree_paths, PerfCounter& counter)
        {
            assert(level < levels - 1);
@@ -636,7 +635,7 @@
            unsigned int max_nodes_per_level>
            __device__ __host__ void inline process_leaf_nodes(
                CG& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
-               Matrix mu, const enumf* rdiag, enumf* pruning_bounds, unsigned int max_paths,
+               Matrix mu, const enumf* rdiag, const enumf* pruning_bounds, unsigned int max_paths,
                eval_sol_fn& process_sol, const enumi* start_points, unsigned int start_point_dim,
                PerfCounter& node_counter)
        {
@@ -649,12 +648,12 @@
            if (active)
            {
                CudaEnumeration<dimensions_per_level> enumeration =
-                   buffer.get_enumeration(level, index, mu, rdiag, radius_squared_location);
+                   buffer.get_enumeration(level, index, mu, rdiag, pruning_bounds);
    
                typedef ProcessLeafCallback<eval_sol_fn, levels, dimensions_per_level, max_nodes_per_level>
                    CallbackT;
                CallbackT callback = { level + 1, index,        start_point_dim,         process_sol,
-                                      mu,        start_points, pruning_bounds, buffer };
+                                      mu,        start_points, buffer };
                CoefficientIterator iter;
                enumeration.enumerate_recursive(
                    callback, max_paths, node_counter, kk_marker<dimensions_per_level - 1>(), iter);
@@ -678,7 +677,7 @@
            const unsigned int index =
                buffer.get_node_count(level) - active_thread_count + group.thread_rank();
            const bool active = index < buffer.get_node_count(level);
-   
+    
            const unsigned int offset_kk = (levels - level - 1) * dimensions_per_level;
    
            *shared_counter = 0;
@@ -757,8 +756,7 @@
    
            while (true)
            {
-               generate_nodes_children(group, buffer, level, mu, rdiag, pruning_bounds,
-                   opts.max_subtree_paths, counter);
+               generate_nodes_children(group, buffer, level, mu, rdiag, pruning_bounds, opts.max_subtree_paths, counter);
    
                group.sync();
    
@@ -1056,7 +1054,7 @@
                cuda_alloc(unsigned char, SubtreeBuffer::memory_size_in_bytes * group_count);
            CudaPtr<unsigned char> point_stream_memory =
                cuda_alloc(unsigned char, Evaluator::memory_size_in_bytes(mu_n) * grid_size);
-           CudaPtr<enumf> pruning_bounds = cuda_alloc(uint32_t, mu_n);
+           CudaPtr<enumf> pruning_bounds = cuda_alloc(enumf, mu_n);
            CudaPtr<enumf> device_mu = cuda_alloc(enumf, mu_n * mu_n);
            CudaPtr<enumf> device_rdiag = cuda_alloc(enumf, mu_n);
            CudaPtr<uint64_t> node_counter = cuda_alloc(uint64_t, tree_dimensions);
@@ -1068,7 +1066,7 @@
            check(cudaMemcpy(device_start_points.get(), start_points,
                start_point_dim * start_point_count * sizeof(enumi), cudaMemcpyHostToDevice));
    
-           PointStream stream(point_stream_memory.get(), pruning_bounds.get(), pruning, initial_radius, grid_size, mu_n);
+           PointStream stream(point_stream_memory.get(), pruning_bounds.get(), pruning, initial_radius * initial_radius, grid_size, mu_n);
            stream.init();
    
            cudaEvent_t raw_event;
@@ -1118,11 +1116,11 @@
                    << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms"
                    << std::endl;
    
-               uint32_t result_radius;
-               check(cudaMemcpy(&result_radius, radius_mem.get(), sizeof(uint32_t), cudaMemcpyDeviceToHost));
+               enumf result_radius;
+               check(cudaMemcpy(&result_radius, pruning_bounds.get(), sizeof(enumf), cudaMemcpyDeviceToHost));
                std::cout << "Searched " << std::accumulate(searched_nodes.begin(), searched_nodes.end(), static_cast<uint64_t>(0))
                    << " tree nodes, and decreased enumeration bound down to "
-                   << sqrt(int_to_float_order_preserving_bijection(result_radius)) << std::endl;
+                   << sqrt(result_radius) << std::endl;
            }
            print_profiling_counter();
    

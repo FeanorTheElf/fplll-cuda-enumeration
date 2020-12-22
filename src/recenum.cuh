@@ -77,7 +77,7 @@ public:
    * submatrix of mu, around the origin.
    */  
   __device__ __host__ CudaEnumeration(Matrix mu, const enumf* rdiag, const enumf* initial_pruning_bounds, unsigned int enum_dim)
-    : mu(mu), rdiag(rdiag), initial_pruning_bounds(initial_pruning_bounds)
+    : mu(mu), rdiag(rdiag), pruning_bounds(initial_pruning_bounds)
   {
     for (unsigned int i = 0; i < maxdim; ++i) {
       x[i] = NAN;

@@ -37,12 +37,14 @@ namespace cuenum {
 
     public:
 
-        CudaWrapper(const enumf* mu, const enumf* rdiag, const unsigned int dimensions, const enumi* start_point_coefficients, unsigned int start_point_dim,
-            const enumf* initial_pruning_bounds, const enumf initial_radius, process_sol_fn evaluator, CudaEnumOpts enum_opts)
-            : mu(mu), rdiag(rdiag), enum_levels(dimensions - start_point_dim), start_point_coefficients(start_point_coefficients), start_point_count(start_point_count),
+        CudaWrapper(const enumf* mu, const enumf* rdiag, unsigned int enum_dimensions, const enumi* start_point_coefficients, unsigned int start_point_dim,
+            unsigned int start_point_count, const enumf* initial_pruning_bounds, const enumf initial_radius, process_sol_fn evaluator, CudaEnumOpts enum_opts)
+            : mu(mu), rdiag(rdiag), enum_levels(enum_dimensions / enum_opts.dimensions_per_level), start_point_coefficients(start_point_coefficients), start_point_count(start_point_count),
             start_point_dim(start_point_dim), initial_pruning_bounds(initial_pruning_bounds), initial_radius(initial_radius), evaluator(evaluator), enum_opts(enum_opts)
         {
-
+            if (enum_dimensions % enum_opts.dimensions_per_level != 0) {
+                throw "enumeration dimension count (i.e. dimensions minus start point dimensions) must be divisible by enum_opts.dimensions_per_level";
+            }
         }
 
         template <int dimensions_per_level, int levels>
@@ -95,9 +97,6 @@ namespace cuenum {
             if (enum_opts.dimensions_per_level != dimensions_per_level) {
                 throw "enum_opts.dimensions_per_level not within allowed interval";
             }
-            if (enum_dimensions % dimensions_per_level != 0) {
-                throw "enumeration dimension count (i.e. dimensions minus start point dimensions) must be divisible by enum_opts.dimensions_per_level";
-            }
 
             return search_enumeration_choose_levels(int_marker<dimensions_per_level>(), int_marker<1>(),
                 int_marker<cudaenum_max_levels(dimensions_per_level) - 1>());
@@ -131,12 +130,11 @@ namespace cuenum {
 
     std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
         const unsigned int enum_dimensions,
-        const enumi* start_point_coefficients, unsigned int start_point_count,
-        unsigned int start_point_dim, double initial_radius, const double* initial_pruning_bounds,
-        process_sol_fn evaluator,
-        CudaEnumOpts opts)
+        const double* start_point_coefficients, unsigned int start_point_count,
+        unsigned int start_point_dim, const double* pruning, double initial_radius,
+        process_sol_fn evaluator, CudaEnumOpts opts)
     {
-        CudaWrapper wrapper(mu, rdiag, enum_dimensions, start_point_coefficients, start_point_count, start_point_dim, initial_pruning_bounds, initial_radius, evaluator, opts);
+        CudaWrapper wrapper(mu, rdiag, enum_dimensions, start_point_coefficients, start_point_dim, start_point_count, pruning, initial_radius, evaluator, opts);
         return wrapper.search_enumeration_choose_dims_per_level(int_marker<1>(), int_marker<cudaenum_max_dims_per_level - 1>());
     }
 
@@ -178,13 +176,17 @@ namespace cuenum {
     }
 
     template<unsigned int max_startdim>
-    PinnedPtr<enumi> enumerate_start_points(const int dim, const int start_dims, double radius_squared, const enumf* mu, const enumf* rdiag, unsigned int& start_point_count, uint64_t* nodes) {
+    PinnedPtr<enumi> enumerate_start_points(const int dim, const int start_dims, const enumf* pruning, enumf radius_squared, const enumf* mu, const enumf* rdiag, unsigned int& start_point_count, uint64_t* nodes) {
 
         std::multimap<enumf, std::vector<enumi>> start_points;
 
-        uint32_t radius_squared_location = float_to_int_order_preserving_bijection(radius_squared);
+        std::unique_ptr<enumf[]> pruning_bounds(new enumf[max_startdim]);
+        for (unsigned int i = 0; i < start_dims; ++i) {
+            pruning_bounds[i] = pruning[i] * radius_squared;
+        }
+
         Matrix mu_matrix = Matrix(mu, dim).block(dim - start_dims, dim - start_dims);
-        CudaEnumeration<max_startdim> enumobj(mu_matrix, &rdiag[dim - start_dims], &radius_squared_location, start_dims);
+        CudaEnumeration<max_startdim> enumobj(mu_matrix, &rdiag[dim - start_dims], pruning_bounds.get(), start_dims);
 
         simple_callback_fn callback = [&start_points, start_dims](const enumi* x, enumf squared_norm) {
             start_points.insert(std::make_pair(squared_norm, std::vector<enumi>(x, &x[start_dims])));
@@ -238,10 +240,10 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
 
     unsigned int start_point_count = 0;
     uint64_t* start_enum_node_counts = &result[dim - start_dims];
-    PinnedPtr<enumi> start_point_array = cuenum::enumerate_start_points<cuenum::cudaenum_min_startdim + cuenum::cudaenum_max_dims_per_level>(dim, start_dims, maxdist, mu.get(), rdiag.get(), start_point_count, start_enum_node_counts);
+    PinnedPtr<enumi> start_point_array = cuenum::enumerate_start_points<cuenum::cudaenum_min_startdim + cuenum::cudaenum_max_dims_per_level>(dim, start_dims, &pruning[dim - start_dims], maxdist, mu.get(), rdiag.get(), start_point_count, start_enum_node_counts);
 
     std::vector<uint64_t> node_counts = cuenum::search_enumeration(mu.get(), rdiag.get(), dim - start_dims, start_point_array.get(),
-        start_point_count, start_dims, cbsol, radius, opts);
+        start_point_count, start_dims, pruning.get(), radius, cbsol, opts);
 
     std::copy(node_counts.begin(), node_counts.end(), result.begin());
     return result;

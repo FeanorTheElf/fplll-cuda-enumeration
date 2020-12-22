@@ -59,6 +59,9 @@ void set_lattice_config(const float* lattice, double* mu, size_t mudim, bool mut
         }
         rdiag[i] = lattice[i * mudim + i] * lattice[i * mudim + i];
     }
+    for (size_t i = 0; i < mudim; ++i) {
+        pruning[i] = 1.;
+    }
 }
 
 bool matches_solution(const float* expected, const double* actual, size_t n) {

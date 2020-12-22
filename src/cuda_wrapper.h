@@ -46,12 +46,11 @@ struct CudaEnumOpts
 };
 
 constexpr CudaEnumOpts default_opts = {50, .5, 3, 8, 32 * 256};
-
-std::vector<uint64_t> search_enumeration(const double *mu, const double *rdiag,
-                                 const unsigned int enum_dimensions,
-                                 const double *start_point_coefficients, unsigned int start_point_count,
-                                 unsigned int start_point_dim, process_sol_fn evaluator,
-                                 double initial_radius, CudaEnumOpts opts = default_opts);
+std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
+    const unsigned int enum_dimensions,
+    const double* start_point_coefficients, unsigned int start_point_count,
+    unsigned int start_point_dim, const double* pruning, double initial_radius,
+    process_sol_fn evaluator, CudaEnumOpts opts = default_opts);
 
 /**
  * Allocates memory and fills it with the given start points, so that it is directly copyable to the device

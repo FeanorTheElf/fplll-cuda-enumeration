@@ -67,7 +67,7 @@ public:
   }
 
   __device__ __host__ inline void operator()(enumi x, unsigned int coordinate, enumf norm_square,
-                                             unsigned int point_dimension, uint32_t *enum_bound_location)
+                                             unsigned int point_dimension)
   {
     if (coordinate == 0) {
       point_index = aggregated_atomic_inc(write_to_index) % buffer_size;
@@ -90,7 +90,7 @@ class PointStreamEndpoint {
   unsigned int evaluator_count;
   unsigned int point_dimension;
   PinnedPtr<unsigned char> host_memory;
-  PinnedPtr<uint32_t> host_enumeration_bounds;
+  PinnedPtr<enumf> host_enumeration_bounds;
   enumf* device_enumeration_bounds;
   const enumf* relative_enumeration_bounds;
   enumf global_enumeration_radius_squared;
@@ -110,11 +110,11 @@ class PointStreamEndpoint {
     return reinterpret_cast<unsigned int*>(device_evaluator_memory + sizeof(enumf) * buffer_size);
   }
 
-  inline update_enumeration_bounds() {
+  inline void update_enumeration_bounds() {
     for (unsigned int i = 0; i < point_dimension; ++i) {
-      host_enumeration_bounds[i] = relative_enumeration_bounds[i] * global_enumeration_radius_squared;
+      host_enumeration_bounds.get()[i] = relative_enumeration_bounds[i] * global_enumeration_radius_squared;
     }
-    check(cudaMemcpy(device_enumeration_bounds, host_enumeration_bounds.get(), point_dimension * sizeof(enumf), cudaMemcpyHostToDevice));
+    check(cudaMemcpyAsync(device_enumeration_bounds, host_enumeration_bounds.get(), point_dimension * sizeof(enumf), cudaMemcpyHostToDevice, stream.get()));
   }
   
 public:
@@ -133,7 +133,7 @@ public:
       point_dimension(point_dimension),
       device_memory(device_memory),
       host_memory(alloc_pinned_memory<unsigned char>(evaluator_count * PointStreamEvaluator<buffer_size>::memory_size_in_bytes(point_dimension))),
-      host_enumeration_bounds(alloc_pinned_memory<uint32_t>(point_dimension)),
+      host_enumeration_bounds(alloc_pinned_memory<enumf>(point_dimension)),
       device_enumeration_bounds(device_enumeration_bounds),
       relative_enumeration_bounds(relative_enumeration_bounds),
       global_enumeration_radius_squared(initial_radius_squared)
@@ -162,6 +162,7 @@ public:
             std::memset(host_has_written_round(i), 0, buffer_size * sizeof(unsigned int));
         }
         update_enumeration_bounds();
+        check(cudaStreamSynchronize(stream.get()));
     }
   
     /**
@@ -200,9 +201,8 @@ public:
             }
         }
         if (point_count > 0) {
-            update_enumeration_bounds();
             check(cudaStreamSynchronize(stream.get()));
-            check(cudaMemcpyAsync(device_enumeration_bound_location, enum_bound_mem.get(), sizeof(uint32_t), cudaMemcpyHostToDevice, stream.get()));
+            update_enumeration_bounds();
             if (print_status) {
                 std::cout << "Got " << point_count << " new solution points and can decrease enum bound to " << global_enumeration_radius_squared << std::endl;
             }

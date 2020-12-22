@@ -87,11 +87,13 @@ template<unsigned int buffer_size>
 class PointStreamEndpoint {
 
   void* device_memory;
-  uint32_t* device_enumeration_bound_location;
   unsigned int evaluator_count;
   unsigned int point_dimension;
   PinnedPtr<unsigned char> host_memory;
-  PinnedPtr<uint32_t> enum_bound_mem;
+  PinnedPtr<uint32_t> host_enumeration_bounds;
+  enumf* device_enumeration_bounds;
+  const enumf* relative_enumeration_bounds;
+  enumf global_enumeration_radius_squared;
   std::vector<std::unique_ptr<unsigned int[]>> last_has_written_round;
   CudaStream stream;
 
@@ -107,16 +109,34 @@ class PointStreamEndpoint {
     unsigned char* device_evaluator_memory = static_cast<unsigned char*>(device_memory) + PointStreamEvaluator<buffer_size>::memory_size_in_bytes(point_dimension) * evaluator_id;
     return reinterpret_cast<unsigned int*>(device_evaluator_memory + sizeof(enumf) * buffer_size);
   }
+
+  inline update_enumeration_bounds() {
+    for (unsigned int i = 0; i < point_dimension; ++i) {
+      host_enumeration_bounds[i] = relative_enumeration_bounds[i] * global_enumeration_radius_squared;
+    }
+    check(cudaMemcpy(device_enumeration_bounds, host_enumeration_bounds.get(), point_dimension * sizeof(enumf), cudaMemcpyHostToDevice));
+  }
   
 public:
 
-  inline PointStreamEndpoint(unsigned char* device_memory, uint32_t* device_enumeration_bound_location, unsigned int evaluator_count, unsigned int point_dimension)
+  /**
+   * Initializes the streaming endpoint on the host side to be able to collect points from multiple device side endpoints and
+   * update the enumeration bounds when points are found.
+   *
+   * @param device_memory - contigous segment on the device containing the batches of memory corresponding to each evaluator
+   * @param device_enumeration_bounds - memory on the device containing the n absolute enumeration bounds for each level, will be updated when points are found
+   * @param relative_enumeration_bounds - memory on the host containing the n enumeration bounds relative to the global enumeration bound
+   * @param initial_radius_squared - the initial global enumeration bound, this can be decreased whenever new points are found
+   */
+  inline PointStreamEndpoint(unsigned char* device_memory, enumf* device_enumeration_bounds, const enumf* relative_enumeration_bounds, enumf initial_radius_squared, unsigned int evaluator_count, unsigned int point_dimension)
     : evaluator_count(evaluator_count),
       point_dimension(point_dimension),
-      device_enumeration_bound_location(device_enumeration_bound_location),
       device_memory(device_memory),
       host_memory(alloc_pinned_memory<unsigned char>(evaluator_count * PointStreamEvaluator<buffer_size>::memory_size_in_bytes(point_dimension))),
-      enum_bound_mem(alloc_pinned_memory<uint32_t>(1))
+      host_enumeration_bounds(alloc_pinned_memory<uint32_t>(point_dimension)),
+      device_enumeration_bounds(device_enumeration_bounds),
+      relative_enumeration_bounds(relative_enumeration_bounds),
+      global_enumeration_radius_squared(initial_radius_squared)
     {
         const unsigned int used_device = 0;
         cudaDeviceProp deviceProp;
@@ -132,14 +152,22 @@ public:
         }
     }
 
+    /**
+     * Initializes the memory on host and device
+     */
     __host__ inline void init() {
         for (unsigned int i = 0; i < evaluator_count; ++i) {
             // use default cuda stream to prevent overlap with kernel execution & point query
             check(cudaMemset(device_has_written_round(i), 0, buffer_size * sizeof(unsigned int)));
             std::memset(host_has_written_round(i), 0, buffer_size * sizeof(unsigned int));
         }
+        update_enumeration_bounds();
     }
   
+    /**
+     * Queries all points that have been found since the last time this function was called, and passes them
+     * to the given callback. The enumeration bound returned by the callback is written back to the device.
+     */
     template<typename Fn, bool print_status = true>
     __host__ inline void query_new_points(Fn callback) {
         for (unsigned int i = 0; i < evaluator_count; ++i) {
@@ -149,7 +177,6 @@ public:
         check(cudaMemcpyAsync(host_memory.get(), device_memory, total_size, cudaMemcpyDeviceToHost, stream.get()));
         check(cudaStreamSynchronize(stream.get()));
 
-        float new_enumeration_bound = INFINITY;
         unsigned int point_count = 0;
         for (unsigned int i = 0; i < evaluator_count; ++i) {
             for (unsigned int j = 0; j < buffer_size; ++j) {
@@ -163,7 +190,7 @@ public:
                     enumi* points = reinterpret_cast<enumi*>(static_cast<unsigned char*>(evaluator_memory(i)) + (sizeof(enumf) + sizeof(unsigned int)) * buffer_size);
                     enumi* x = &points[j * point_dimension];
                     enumf evaluator_enum_bound = callback(norm_square, x);
-                    new_enumeration_bound = std::min<float>(evaluator_enum_bound, new_enumeration_bound);
+                    global_enumeration_radius_squared = std::min<enumf>(evaluator_enum_bound, global_enumeration_radius_squared);
                 } else {
                     if (print_status) {
                         std::cout << "Buffer not big enough, block " << i << " stored " << (new_written_count - last_written_count) << " points at index " << j << std::endl;
@@ -173,11 +200,11 @@ public:
             }
         }
         if (point_count > 0) {
-            *enum_bound_mem = float_to_int_order_preserving_bijection(new_enumeration_bound);
+            update_enumeration_bounds();
             check(cudaStreamSynchronize(stream.get()));
             check(cudaMemcpyAsync(device_enumeration_bound_location, enum_bound_mem.get(), sizeof(uint32_t), cudaMemcpyHostToDevice, stream.get()));
             if (print_status) {
-                std::cout << "Got " << point_count << " new solution points and can decrease enum bound to " << new_enumeration_bound << std::endl;
+                std::cout << "Got " << point_count << " new solution points and can decrease enum bound to " << global_enumeration_radius_squared << std::endl;
             }
             check(cudaStreamSynchronize(stream.get()));
         }

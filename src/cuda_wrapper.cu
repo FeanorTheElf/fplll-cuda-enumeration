@@ -17,8 +17,6 @@
 #include <map>
 #include "cpu_test.cuh"
 
-#define TEST_CPU_ONLY
-
 namespace cuenum {
 
     template <int min> struct int_marker
@@ -184,7 +182,7 @@ namespace cuenum {
     }
 
     template<unsigned int max_startdim>
-    PinnedPtr<enumi> enumerate_start_points(const int dim, const int start_dims, const enumf* pruning, enumf radius_squared, const enumf* mu, const enumf* rdiag, unsigned int& start_point_count, uint64_t* nodes) {
+    std::unique_ptr<enumi[]> enumerate_start_points(const int dim, const int start_dims, const enumf* pruning, enumf radius_squared, const enumf* mu, const enumf* rdiag, unsigned int& start_point_count, uint64_t* nodes) {
 
         std::multimap<enumf, std::vector<enumi>> start_points;
 
@@ -223,8 +221,15 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
     }
 
     std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> result = {};
+
+#ifdef TEST_CPU_ONLY
+    std::unique_ptr<enumf[]> mu(new enumf[dim * dim]);
+    std::unique_ptr<enumf[]> rdiag(new enumf[dim]);
+#else
     PinnedPtr<enumf> mu = alloc_pinned_memory<enumf>(dim * dim);
     PinnedPtr<enumf> rdiag = alloc_pinned_memory<enumf>(dim);
+#endif
+
     std::unique_ptr<enumf[]> pruning(new enumf[dim]);
     enumf radius = std::sqrt(maxdist);
 
@@ -236,6 +241,7 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
     }
 
     cuenum::CudaEnumOpts opts = cuenum::default_opts;
+
 #ifdef TEST_CPU_ONLY
     opts.initial_nodes_per_group = 1;
 #endif
@@ -251,7 +257,7 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
 
     unsigned int start_point_count = 0;
     uint64_t* start_enum_node_counts = &result[dim - start_dims];
-    PinnedPtr<enumi> start_point_array = cuenum::enumerate_start_points<cuenum::cudaenum_min_startdim + cuenum::cudaenum_max_dims_per_level>(dim, start_dims, &pruning[dim - start_dims], maxdist, mu.get(), rdiag.get(), start_point_count, start_enum_node_counts);
+    std::unique_ptr<enumi[]> start_point_array = cuenum::enumerate_start_points<cuenum::cudaenum_min_startdim + cuenum::cudaenum_max_dims_per_level>(dim, start_dims, &pruning[dim - start_dims], maxdist, mu.get(), rdiag.get(), start_point_count, start_enum_node_counts);
 
     std::vector<uint64_t> node_counts = cuenum::search_enumeration(mu.get(), rdiag.get(), dim - start_dims, start_point_array.get(),
         start_point_count, start_dims, pruning.get(), radius, cbsol, opts);

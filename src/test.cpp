@@ -16,6 +16,7 @@
 #include <vector>
 #include <memory>
 #include <cmath>
+#include <iostream>
 
 #include "cuda_wrapper.h"
 #include "atomic.h"

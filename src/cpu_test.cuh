@@ -19,7 +19,7 @@ namespace cuenum {
         PrefixCounter<CG, block_size> prefix_counter;
         unsigned int counter = 0;
         unsigned int processed_start_point_counter = 0;
-        unsigned long long perf_counter[dimensions] = {};
+        uint64_t perf_counter[dimensions] = {};
         std::unique_ptr<unsigned char[]> buffer_memory(new unsigned char[SubtreeBuffer::memory_size_in_bytes]);
         std::unique_ptr<enumf[]> pruning_bounds(new enumf[point_dimension]);
 
@@ -30,11 +30,8 @@ namespace cuenum {
             if (coordinate == point_dimension - 1) {
                 double bound = process_sol(norm_square, solution_point.get());
                 for (unsigned int i = 0; i < point_dimension; ++i) {
-                    std::cout << solution_point[i] << ", ";
                     pruning_bounds[i] = bound * pruning[i];
                 }
-                std::cout << norm_square;
-                std::cout << std::endl;
             }
         });
         for (unsigned int i = 0; i < point_dimension; ++i) {

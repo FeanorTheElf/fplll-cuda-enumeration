@@ -19,7 +19,7 @@
  * and provides an easily usable interface, as well as one compatible with fplll.
  */
 #include "api.h"
-#include "memory.h"
+#include <memory>
 
 namespace cuenum
 {
@@ -60,18 +60,18 @@ std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
  * will correctly free it.
  */
 template <typename InputIt>
-inline PinnedPtr<double>
+inline std::unique_ptr<double[]>
 create_start_point_array(size_t start_point_count, size_t start_point_dim,
                          InputIt begin, InputIt end)
 {
-  PinnedPtr<double> result = alloc_pinned_memory<double>(start_point_count * start_point_dim);
+  std::unique_ptr<double[]> result(new double[start_point_count * start_point_dim]);
   size_t i = 0;
   for (InputIt it = begin; it != end; ++it)
   {
     const auto& point = it->second;
     for (size_t j = 0; j < start_point_dim; ++j)
     {
-      result.get()[i * start_point_dim + j] = static_cast<double>(point[j]);
+      result[i * start_point_dim + j] = static_cast<double>(point[j]);
     }
     ++i;
   }

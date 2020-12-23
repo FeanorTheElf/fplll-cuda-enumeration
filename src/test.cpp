@@ -36,7 +36,8 @@ float find_initial_radius(const float* lattice, size_t n) {
         }
         result = std::min(norm_squared, result);
     }
-    return std::sqrt(result);
+    float root = std::sqrt(result);
+    return root;
 }
 
 float find_initial_radius(const float* mu, const float* rdiag, size_t n) {
@@ -51,16 +52,24 @@ float find_initial_radius(const float* mu, const float* rdiag, size_t n) {
     return std::sqrt(result);
 }
 
-void set_lattice_config(const float* lattice, double* mu, size_t mudim, bool mutranspose, double* rdiag, double* pruning) {
+void set_lattice_config(const float* lattice, const float* use_pruning, double* mu, size_t mudim, bool mutranspose, double* rdiag, double* pruning) {
     assert(mutranspose);
     for (size_t i = 0; i < mudim; ++i) {
         for (size_t j = i; j < mudim; ++j) {
             mu[i * mudim + j] = lattice[i * mudim + j] / lattice[i * mudim + i];
         }
-        rdiag[i] = lattice[i * mudim + i] * lattice[i * mudim + i];
+        double diag_entry = lattice[i * mudim + i];
+        rdiag[i] = diag_entry * diag_entry;
     }
-    for (size_t i = 0; i < mudim; ++i) {
-        pruning[i] = 1.;
+    if (use_pruning == nullptr) {
+        for (size_t i = 0; i < mudim; ++i) {
+            pruning[i] = 1.;
+        }
+    }
+    else {
+        for (size_t i = 0; i < mudim; ++i) {
+            pruning[i] = use_pruning[i];
+        }
     }
 }
 
@@ -84,7 +93,7 @@ void test_small() {
   double maxdist = find_initial_radius(&lattice[0][0], total_dim) * 1.05;
   maxdist = maxdist * maxdist; 
   std::function<extenum_cb_set_config> set_config = [&lattice](double *mu, size_t mudim, bool mutranspose, double *rdiag, double *pruning) {
-      set_lattice_config(&lattice[0][0], mu, mudim, mutranspose, rdiag, pruning);
+      set_lattice_config(&lattice[0][0], nullptr, mu, mudim, mutranspose, rdiag, pruning);
   };
   bool found_sol = false;
   std::function<extenum_cb_process_sol> process_sol = [&found_sol, &solution, total_dim](double norm_square, double* x)-> double {
@@ -105,10 +114,54 @@ void test_knapsack() {
     double maxdist = find_initial_radius(&lattice[0][0], total_dim) * 1.05;
     maxdist = maxdist * maxdist;
     std::function<extenum_cb_set_config> set_config = [&lattice](double* mu, size_t mudim, bool mutranspose, double* rdiag, double* pruning) {
-        set_lattice_config(&lattice[0][0], mu, mudim, mutranspose, rdiag, pruning);
+        set_lattice_config(&lattice[0][0], nullptr, mu, mudim, mutranspose, rdiag, pruning);
     };
     std::function<extenum_cb_process_sol> process_sol = [](double norm_square, double* x)-> double { return norm_square; };
     fplll_cuda_enum(total_dim, maxdist, set_config, process_sol, nullptr, false, false);
+}
+
+void test_small_pruning() {
+
+    constexpr unsigned int total_dim = 20;
+    const std::array<std::array<float, total_dim>, total_dim>& lattice = test_mu_small;
+    const std::array<float, total_dim>& solution = test_solution_small;
+    std::array<float, total_dim> perfect_pruning = { 
+        1.0, 1.0, 0.9743477584175604, 0.9423841163787428, 0.9263856000895855, 
+        0.9008523060431893, 0.8296935333687608, 0.8102855774733401, 0.8060282566833026, 
+        0.780475051002714, 0.7753487328541254, 0.7145454035684523, 0.6914315630643189, 
+        0.5875042320467091, 0.5284438708994512, 0.49515914481152146, 0.43542772327230544, 
+        0.323115129084805, 0.24018690682537844, 0.001
+    };
+
+    double maxdist = 72000.;
+    std::function<extenum_cb_set_config> set_config = [&lattice, &perfect_pruning](double* mu, size_t mudim, bool mutranspose, double* rdiag, double* pruning) {
+        set_lattice_config(&lattice[0][0], &perfect_pruning[0], mu, mudim, mutranspose, rdiag, pruning);
+    };
+    bool found_sol = false;
+    std::function<extenum_cb_process_sol> process_sol = [&found_sol, &solution, total_dim](double norm_square, double* x)-> double {
+        found_sol |= matches_solution(&solution[0], x, total_dim);
+        return norm_square;
+    };
+    fplll_cuda_enum(total_dim, maxdist, set_config, process_sol, nullptr, false, false);
+    if (!found_sol) {
+        throw "Callback was not called with correct solution!";
+    }
+
+    std::array<float, total_dim> not_perfect_pruning = {
+        1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0
+    };
+    set_config = [&lattice, &not_perfect_pruning](double* mu, size_t mudim, bool mutranspose, double* rdiag, double* pruning) {
+        set_lattice_config(&lattice[0][0], &not_perfect_pruning[0], mu, mudim, mutranspose, rdiag, pruning);
+    };
+    found_sol = false;
+    process_sol = [&found_sol, &solution, total_dim](double norm_square, double* x)-> double {
+        found_sol |= matches_solution(&solution[0], x, total_dim);
+        return norm_square;
+    };
+    fplll_cuda_enum(total_dim, maxdist, set_config, process_sol, nullptr, false, false);
+    if (found_sol) {
+        throw "Found correct solution, even though it should have been pruned!";
+    }
 }
 
 void test_perf() {
@@ -139,6 +192,8 @@ int main()
       std::cout << "test_small() successful!" << std::endl << std::endl;
       test_knapsack();
       std::cout << "test_knapsack() successful!" << std::endl << std::endl;
+      test_small_pruning();
+      std::cout << "test_small_pruning() successful!" << std::endl << std::endl;
 #ifdef PERF_TEST
       test_perf();
       std::cout << "test_perf() successful!" << std::endl << std::endl;

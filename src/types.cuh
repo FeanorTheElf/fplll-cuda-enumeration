@@ -24,6 +24,8 @@
 typedef double enumf;
 typedef double enumi;
 
+typedef std::function<float(enumf, enumi*)> process_sol_fn;
+
 struct Matrix
 {
   const enumf *ptr;

@@ -1016,8 +1016,6 @@
            return get_grid_size(thread_count) * enumerate_block_size;
        }
    
-       typedef std::function<float(enumf, enumi*)> process_sol_fn;
-   
        /**
         * Enumerates all points within the enumeration bound (initialized to parameter initial_radius) and calls
         * the given function on each coordinate of each of these points.

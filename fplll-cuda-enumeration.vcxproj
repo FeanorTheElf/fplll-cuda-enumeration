@@ -30,6 +30,7 @@
     <ClInclude Include="src\types.cuh" />
   </ItemGroup>
   <ItemGroup>
+    <CudaCompile Include="src\cpu_test.cuh" />
     <CudaCompile Include="src\cuda_wrapper.cu" />
   </ItemGroup>
   <ItemGroup>

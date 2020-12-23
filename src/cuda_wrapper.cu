@@ -15,6 +15,9 @@
 #include "enum.cuh"
 #include "cuda_wrapper.h"
 #include <map>
+#include "cpu_test.cuh"
+
+#define TEST_CPU_ONLY
 
 namespace cuenum {
 
@@ -63,8 +66,13 @@ namespace cuenum {
                 enum_opts.max_subtree_paths, enum_opts.min_active_parents_percentage, max_children_node_count,
                 enum_opts.initial_nodes_per_group, enum_opts.thread_count };
 
+#ifdef TEST_CPU_ONLY
+            return enumerate_cpu(mu, rdiag, start_point_coefficients, start_point_dim, start_point_count, initial_pruning_bounds, initial_radius,
+                evaluator, opts);
+#else
             return enumerate(mu, rdiag, start_point_coefficients, start_point_dim, start_point_count, initial_pruning_bounds, initial_radius,
                 evaluator, opts);
+#endif
         }
 
         template <int dimensions_per_level, int min_levels, int delta_levels>
@@ -181,7 +189,7 @@ namespace cuenum {
         std::multimap<enumf, std::vector<enumi>> start_points;
 
         std::unique_ptr<enumf[]> pruning_bounds(new enumf[max_startdim]);
-        for (unsigned int i = 0; i < start_dims; ++i) {
+        for (int i = 0; i < start_dims; ++i) {
             pruning_bounds[i] = pruning[i] * radius_squared;
         }
 
@@ -223,11 +231,14 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
     cbfunc(mu.get(), dim, true, rdiag.get(), pruning.get());
 
     // functions in this library require 1 on the diagonal, not zero
-    for (unsigned int i = 0; i < dim; ++i) {
+    for (int i = 0; i < dim; ++i) {
         mu.get()[i * dim + i] = 1;
     }
 
     cuenum::CudaEnumOpts opts = cuenum::default_opts;
+#ifdef TEST_CPU_ONLY
+    opts.initial_nodes_per_group = 1;
+#endif
 
     int start_dims = cuenum::cudaenum_min_startdim;
     while ((dim - start_dims) % opts.dimensions_per_level != 0) {

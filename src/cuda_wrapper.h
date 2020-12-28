@@ -19,7 +19,7 @@
  * and provides an easily usable interface, as well as one compatible with fplll.
  */
 #include "api.h"
-#include "memory.h"
+#include <memory>
 
 namespace cuenum
 {
@@ -46,12 +46,11 @@ struct CudaEnumOpts
 };
 
 constexpr CudaEnumOpts default_opts = {50, .5, 3, 8, 32 * 256};
-
-std::vector<uint64_t> search_enumeration(const double *mu, const double *rdiag,
-                                 const unsigned int enum_dimensions,
-                                 const double *start_point_coefficients, unsigned int start_point_count,
-                                 unsigned int start_point_dim, process_sol_fn evaluator,
-                                 double initial_radius, CudaEnumOpts opts = default_opts);
+std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
+    const unsigned int enum_dimensions,
+    const double* start_point_coefficients, unsigned int start_point_count,
+    unsigned int start_point_dim, const double* pruning, double initial_radius,
+    process_sol_fn evaluator, CudaEnumOpts opts = default_opts);
 
 /**
  * Allocates memory and fills it with the given start points, so that it is directly copyable to the device
@@ -61,18 +60,18 @@ std::vector<uint64_t> search_enumeration(const double *mu, const double *rdiag,
  * will correctly free it.
  */
 template <typename InputIt>
-inline PinnedPtr<double>
+inline std::unique_ptr<double[]>
 create_start_point_array(size_t start_point_count, size_t start_point_dim,
                          InputIt begin, InputIt end)
 {
-  PinnedPtr<double> result = alloc_pinned_memory<double>(start_point_count * start_point_dim);
+  std::unique_ptr<double[]> result(new double[start_point_count * start_point_dim]);
   size_t i = 0;
   for (InputIt it = begin; it != end; ++it)
   {
     const auto& point = it->second;
     for (size_t j = 0; j < start_point_dim; ++j)
     {
-      result.get()[i * start_point_dim + j] = static_cast<double>(point[j]);
+      result[i * start_point_dim + j] = static_cast<double>(point[j]);
     }
     ++i;
   }

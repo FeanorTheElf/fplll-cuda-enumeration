@@ -63,8 +63,8 @@ private:
   // B * (0, ..., 0, x[j + 1], ... x[n])
   enumf center_partsums[maxdim][maxdim];
   enumf center[maxdim];
-  const uint32_t *radius_squared_location;
 
+  const enumf *pruning_bounds;
   Matrix mu;
   const enumf *rdiag;
 
@@ -76,8 +76,8 @@ public:
    * Initializes this enumeration object to enumerate points in the lattice spanned by the enum_dim x enum_dim lower-right
    * submatrix of mu, around the origin.
    */  
-  __device__ __host__ CudaEnumeration(Matrix mu, const enumf* rdiag, const uint32_t* radius_squared_location, unsigned int enum_dim)
-    : mu(mu), rdiag(rdiag), radius_squared_location(radius_squared_location)
+  __device__ __host__ CudaEnumeration(Matrix mu, const enumf* rdiag, const enumf* initial_pruning_bounds, unsigned int enum_dim)
+    : mu(mu), rdiag(rdiag), pruning_bounds(initial_pruning_bounds)
   {
     for (unsigned int i = 0; i < maxdim; ++i) {
       x[i] = NAN;
@@ -100,7 +100,7 @@ public:
 
   template <int kk> __device__ __host__ bool is_enumeration_done() const;
 
-  __device__ __host__ enumf get_radius_squared();
+  __device__ __host__ enumf get_pruning_bound(unsigned int kk);
 
   template <unsigned int levels, unsigned int dimensions_per_level,
             unsigned int max_nodes_per_level>
@@ -108,9 +108,9 @@ public:
 };
 
 template <unsigned int maxdim>
-__device__ __host__ inline enumf CudaEnumeration<maxdim>::get_radius_squared()
+__device__ __host__ inline enumf CudaEnumeration<maxdim>::get_pruning_bound(unsigned int kk)
 {
-  return int_to_float_order_preserving_bijection(*radius_squared_location);
+  return pruning_bounds[kk];
 }
 
 template <unsigned int maxdim>
@@ -150,7 +150,7 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
   assert(rdiag[kk] >= 0);
   assert(newdist >= 0);
 
-  if (!(newdist <= get_radius_squared()))
+  if (!(newdist <= get_pruning_bound(kk)))
   {
     x[kk] = NAN;
     return true;
@@ -192,7 +192,7 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
     }
     --max_paths;
 
-    if (!(newdist2 <= get_radius_squared()))
+    if (!(newdist2 <= get_pruning_bound(kk)))
     {
       x[kk] = NAN;
       return true;
@@ -230,7 +230,7 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
   assert(rdiag[kk] >= 0);
   assert(newdist >= 0);
 
-  if (!(newdist <= get_radius_squared()))
+  if (!(newdist <= get_pruning_bound(kk)))
   {
     x[kk] = NAN;
     return true;
@@ -253,7 +253,7 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
     }
     --max_paths;
 
-    if (!(newdist2 <= get_radius_squared()))
+    if (!(newdist2 <= get_pruning_bound(kk)))
     {
       x[kk] = NAN;
       return true;

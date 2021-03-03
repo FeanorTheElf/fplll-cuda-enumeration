@@ -6,3 +6,13 @@ x64
 *.vcxproj.user
 *.vcxproj.filters
 .vs
+report/*.bbl
+report/*.bcf
+report/*.blg
+report/*.fls
+report/*.log
+report/*.aux
+report/*.out
+report/*.synctex.gz
+report/*.fdb_latexmk
+report/*.run.xml

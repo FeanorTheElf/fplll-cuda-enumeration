@@ -1,0 +1,178 @@
+@article{bkz2,
+author="Chen, Yuanmi and Nguyen, Phong Q.",
+editor="Lee, Dong Hoon and Wang, Xiaoyun",
+title="BKZ 2.0: Better Lattice Security Estimates",
+booktitle="Advances in Cryptology -- ASIACRYPT 2011",
+year="2011",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="1--20",
+abstract="The best lattice reduction algorithm known in practice for high dimension is Schnorr-Euchner's BKZ: all security estimates of lattice cryptosystems are based on NTL's old implementation of BKZ. However, recent progress on lattice enumeration suggests that BKZ and its NTL implementation are no longer optimal, but the precise impact on security estimates was unclear. We assess this impact thanks to extensive experiments with BKZ 2.0, the first state-of-the-art implementation of BKZ incorporating recent improvements, such as Gama-Nguyen-Regev pruning. We propose an efficient simulation algorithm to model the behaviour of BKZ in high dimension with high blocksize ≥{\thinspace}50, which can predict approximately both the output quality and the running time, thereby revising lattice security estimates. For instance, our simulation suggests that the smallest NTRUSign parameter set, which was claimed to provide at least 93-bit security against key-recovery lattice attacks, actually offers at most 65-bit security.",
+isbn="978-3-642-25385-0"
+}
+
+@article{bkz,
+author = {Schnorr, C. P. and Euchner, M.},
+title = {Lattice basis reduction: Improved practical algorithms and solving subset sum problems},
+journal = {Mathematical Programming},
+pages = {181-199},
+volume = {66},
+year = {1994},
+abstract = {We report on improved practical algorithms for lattice basis reduction. We propose a practical floating point version of theL3-algorithm of Lenstra, Lenstra, Lovász (1982). We present a variant of theL3-algorithm with “deep insertions” and a practical algorithm for block Korkin—Zolotarev reduction, a concept introduced by Schnorr (1987). Empirical tests show that the strongest of these algorithms solves almost all subset sum problems with up to 66 random weights of arbitrary bit length within at most a few hours on a UNISYS 6000/70 or within a couple of minutes on a SPARC1 + computer.}
+}
+
+@InProceedings{pruning,
+author="Gama, Nicolas
+and Nguyen, Phong Q.
+and Regev, Oded",
+editor="Gilbert, Henri",
+title="Lattice Enumeration Using Extreme Pruning",
+booktitle="Advances in Cryptology -- EUROCRYPT 2010",
+year="2010",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="257--278",
+abstract="Lattice enumeration algorithms are the most basic algorithms for solving hard lattice problems such as the shortest vector problem and the closest vector problem, and are often used in public-key cryptanalysis either as standalone algorithms, or as subroutines in lattice reduction algorithms. Here we revisit these fundamental algorithms and show that surprising exponential speedups can be achieved both in theory and in practice by using a new technique, which we call extreme pruning. We also provide what is arguably the first sound analysis of pruning, which was introduced in the 1990s by Schnorr et al."
+}
+
+@article{lll,
+author = {Lenstra, A. K. and Lenstra Jr and Lovász, L.},
+title = {Factoring polynomials with rational coefficients},
+journal = {Mathematische Annalen},
+volume = {261},
+pages = {513–534},
+year = {1982}
+}
+
+@unpublished{fplll,
+shorthand = {fplll16},
+author = {The {FPLLL} development team},
+title = {{fplll}, a lattice reduction library},
+year = 2016,
+note = {Available at \url{https://github.com/fplll/fplll}},
+url = {https://github.com/fplll/fplll}
+}
+
+@inproceedings{svp_nphard,
+author = {Ajtai, Mikl\'{o}s},
+title = {The Shortest Vector Problem in L2 is NP-Hard for Randomized Reductions (Extended Abstract)},
+year = {1998},
+isbn = {0897919629},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/276698.276705},
+doi = {10.1145/276698.276705},
+booktitle = {Proceedings of the Thirtieth Annual ACM Symposium on Theory of Computing},
+pages = {10–19},
+numpages = {10},
+location = {Dallas, Texas, USA},
+series = {STOC '98}
+}
+
+@article{enum,
+author = {U. Fincke and M. Pohst},
+title = {Improved methods for calculating vectors of short length in a lattice, including a complexity analysis},
+journal = {Math. Comp.},
+volume = {44 (170)},
+pages = {463–471},
+year = {1985}
+}
+
+@InProceedings{enum_numerics,
+author="Pujol, Xavier
+and Stehl{\'e}, Damien",
+editor="Pieprzyk, Josef",
+title="Rigorous and Efficient Short Lattice Vectors Enumeration",
+booktitle="Advances in Cryptology - ASIACRYPT 2008",
+year="2008",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="390--405",
+abstract="The Kannan-Fincke-Pohst enumeration algorithm for the shortest and closest lattice vector problems is the keystone of all strong lattice reduction algorithms and their implementations. In the context of the fast developing lattice-based cryptography, the practical security estimates derive from floating-point implementations of these algorithms. However, these implementations behave very unexpectedly and make these security estimates debatable. Among others, numerical stability issues seem to occur and raise doubts on what is actually computed. We give here the first results on the numerical behavior of the floating-point enumeration algorithm. They provide a theoretical and practical framework for the use of floating-point numbers within strong reduction algorithms, which could lead to more sensible hardness estimates."
+}
+
+@article{cuda,
+author = {Nickolls, John and Buck, Ian and Garland, Michael and Skadron, Kevin},
+title = {Scalable Parallel Programming with CUDA: Is CUDA the Parallel Programming Model That Application Developers Have Been Waiting For?},
+year = {2008},
+issue_date = {March/April 2008},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {6},
+abstract = {The advent of multicore CPUs and manycore GPUs means that mainstream processor chips are now parallel systems. Furthermore, their parallelism continues to scale with Moore’s law. The challenge is to develop mainstream application software that transparently scales its parallelism to leverage the increasing number of processor cores, much as 3D graphics applications transparently scale their parallelism to manycore GPUs with widely varying numbers of cores.},
+journal = {Queue},
+month = mar,
+pages = {40–53},
+numpages = {14}
+}
+
+@inproceedings{sieve,
+author = {Ajtai, Mikl\'{o}s and Kumar, Ravi and Sivakumar, D.},
+title = {A Sieve Algorithm for the Shortest Lattice Vector Problem},
+year = {2001},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+abstract = {We present a randomized 2^{O(n)} time algorithm to compute a shortest non-zero vector in an n-dimensional rational lattice. The best known time upper bound for this problem was 2^{O(nlog n)} first given by Kannan [7] in 1983. We obtain several consequences of this algorithm for related problems on lattices and codes, including  an improvement for polynomial time approximations to the shortest vector problem. In this improvement we gain a factor of log log n in the exponent of the approximating factor.},
+booktitle = {Proceedings of the Thirty-Third Annual ACM Symposium on Theory of Computing},
+pages = {601–610},
+numpages = {10},
+location = {Hersonissos, Greece},
+series = {STOC '01}
+}
+
+@misc{g6k,
+author = {Martin R. Albrecht and Léo Ducas and Gottfried Herold and Elena Kirshanova and Eamonn W. Postlethwaite and Marc Stevens},
+title = {The General Sieve Kernel and New Records in Lattice Reduction},
+howpublished = {Cryptology ePrint Archive, Report 2019/089},
+year = {2019},
+note = {\url{https://eprint.iacr.org/2019/089}},
+}
+
+@inproceedings{tree_search_cuda,
+author = {Jenkins, John and Arkatkar, Isha and Owens, John D. and Choudhary, Alok and Samatova, Nagiza F.},
+title = {Lessons Learned from Exploring the Backtracking Paradigm on the GPU},
+year = {2011},
+publisher = {Springer-Verlag},
+address = {Berlin, Heidelberg},
+abstract = {We explore the backtracking paradigm with properties seen as sub-optimal for GPU architectures, using as a case study the maximal clique enumeration problem, and find that the presence of these properties limit GPU performance to approximately 1.4-2.25 times a single CPU core. The GPU performance "lessons" we find critical to providing this performance include a coarse-and-fine-grain parallelization of the search space, a low-overhead load-balanced distribution of work, global memory latency hiding through coalescence, saturation, and shared memory utilization, and the use of GPU output buffering as a solution to irregular workloads and a large solution domain. We also find a strong reliance on an efficient global problem structure representation that bounds any efficiencies gained from these lessons, and discuss the meanings of these results to backtracking problems in general.},
+booktitle = {Proceedings of the 17th International Conference on Parallel Processing - Volume Part II},
+pages = {425–437},
+numpages = {13},
+location = {Bordeaux, France},
+series = {Euro-Par'11}
+}
+
+@misc{sieving_gpu,
+author = {Léo Ducas and Marc Stevens and Wessel van Woerden},
+title = {Advanced Lattice Sieving on GPUs, with Tensor Cores},
+howpublished = {Cryptology ePrint Archive, Report 2021/141},
+year = {2021},
+note = {\url{https://eprint.iacr.org/2021/141}},
+}
+
+@inproceedings{enum1,
+author = {Kannan, Ravi},
+title = {Improved Algorithms for Integer Programming and Related Lattice Problems},
+year = {1983},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+abstract = {The integer programming problem is: Given m\texttimes{}n and m\texttimes{}l matrices A and b respectively of integers, find whether, there exists an all integer n\texttimes{}l vector x satisfying the m inequalities A\texttimes{}≤b. In settling an important open problem, Lenstra (1981) showed in an elegant way that when n, the number of dimensions is fixed, there is a polynomial-time algorithm to solve this problem. His algorithm achieves a running-time of 0(cn3•p(length of data)) where p is some polynomial and c a constant independent of n. Since such an algorithm has several important applications - cryptography (Shamir (1982)), diophantine approximations (Lagarias (1982)), coding theory (Conway and Sloane (1982), etc. it is important to improve the running time. We present an algorithm here that has a running time of 0(n9nL log L) where L is the length of the input. Whereas Lenstra's algorithm in the worst case reduces an n-dimensional problem to cn2−(n−) dimensional problems, our algorithm effectively reduces an n-dimensional problem to at most polynomially many (n−1) dimensional problems, thus achieving our time bound. The algorithm we propose, first finds a “more orthogonal” basis for a lattice (see the next section for the definition of a lattice) than those of Lenstra (1981) and Lenstra, Lenstra and Lovasz (1982), but in time 0(ndn poly (length of input)). It then uses an enumeration technique to solve integer programming and related problems.While this paper presents mainly the theoretical improvements that can be made in the algorithms, we discuss in section 6 why in practice our estimates of running time may be overly pessimistic.The last part of the paper discusses some complexity issues. It is an interesting open problem as to whether finding the Euclidean shortest non-zero vector of a given lattice is NP-hard. (See Lenstra (1981), Van Emde Boas (1981) and Lagarias (1982)).},
+booktitle = {Proceedings of the Fifteenth Annual ACM Symposium on Theory of Computing},
+pages = {193–206},
+numpages = {14},
+series = {STOC '83}
+}
+
+@InProceedings{enum_complexity,
+author="Hanrot, Guillaume
+and Stehl{\'e}, Damien",
+editor="Menezes, Alfred",
+title="Improved Analysis of Kannan's Shortest Lattice Vector Algorithm",
+booktitle="Advances in Cryptology - CRYPTO 2007",
+year="2007",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="170--186",
+abstract="The security of lattice-based cryptosystems such as NTRU, GGH and Ajtai-Dwork essentially relies upon the intractability of computing a shortest non-zero lattice vector and a closest lattice vector to a given target vector in high dimensions. The best algorithms for these tasks are due to Kannan, and, though remarkably simple, their complexity estimates have not been improved since over twenty years. Kannan's algorithm for solving the shortest vector problem (SVP) is in particular crucial in Schnorr's celebrated block reduction algorithm, on which rely the best known generic attacks against the lattice-based encryption schemes mentioned above. In this paper we improve the complexity upper-bounds of Kannan's algorithms. The analysis provides new insight on the practical cost of solving SVP, and helps progressing towards providing meaningful key-sizes.",
+}
+

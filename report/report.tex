@@ -8,8 +8,12 @@
 \usepackage{algorithmic}
 \usepackage{hyperref}
 
-\title{Enumeration on GPU for fplll}
-\author{Marc Stevens, Simon Pohmann, Jens Zumbrägel}
+\usepackage[backend=biber,style=alphabetic,sorting=ynt]{biblatex}
+
+\addbibresource{bibliography.bib}
+
+\title{Lattice Enumeration on GPU for fplll}
+\author{Simon Pohmann, Marc Stevens, Jens Zumbrägel}
 
 \pgfplotsset{
     discard if not/.style 2 args={
@@ -25,64 +29,146 @@
 }
 
 \newcommand{\Z}{\mathbb{Z}}
+\newcommand{\R}{\mathbb{R}}
 
 \begin{document}
     \maketitle
+    
+    \begin{abstract}
+    The Kannan-Fincke-Pohst lattice enumeration algorithm is the classical method for solving the shortest vector problem. It is also a fundamental tool for most lattice reduction algorithms that provide speed-length tradeoffs. 
+    As this algorithm allows efficient parallel implementations, it is likely that implementing it on modern GPUs can significantly improve performance. 
+    We provide such an implementation that is compatible with the fplll lattice reduction library \cite{fplll} and achieves a considerable speedup in higher lattice dimensions, compared to current, multithreaded versions.
+    For this, we use the CUDA technology that provides an abstract language for programming GPUs.
+    
+    \paragraph{Keywords} Lattice Enumeration, Shortest Vector, fplll, Cryptanalysis
+    \end{abstract}
+
+    \section{Introduction}
+
+    A lattice is a free $\Z$-submodule of the $d$-dimensional Euclidean space. Lattices are usually considered together with the norm from this space, which then gives rise to interesting computational problems.
+    The most fundamental is the shortest vector problem (SVP), which is to find a shortest, nonzero lattice vector given a lattice basis. 
+    This problem is often used as a basis for cryptography, as it is conjectured to be extremely hard, even in approximative versions.
+
+    To solve this problem exactly, there are two main approaches:
+    The classical method is the Kannan-Fincke-Pohst lattice enumeration \cite{enum1}, \cite{enum}, which performs an exhaustive search on all lattice points of a bounded norm. The advantages of this algorithm are mainly that it requires only polynomially much memory and is easily parallelizable. Additionally, many optimizations have been introduced, the most important one being pruning \cite{pruning}.
+    However, the running time is super-exponential and therefore not asymptotically optimal, while the space complexity is only polynomial.
+    The other approach is lattice sieving \cite{sieve} which yield exponential running times, at the cost of needing exponential space. 
+    A lot of work in this field has recently made this approach competitive.
+    Nevertheless, lattice enumeration is still widely used and for dimensions up to 70 the best known algorithm \cite{g6k}.
+
+    Due to the conjectured hardness of SVP, it suggests itself to use general-purpose GPU computing that has developed in the last decade.
+    Graphic processing units (GPUs) are optimized for highly parallelized workloads and have higher computing power than CPUs on suitable algorithms.
+    Therefore, they have been successfully used in various fields, like machine learning, physical simulations and optimization/search problems, also including cryptoanalysis.
+    
+    For example, an implementation of the sieving approach on GPUs has recently broken current SVP records \cite{sieving_gpu}.
+    Because of the high memory requirements of sieving, this algorithm used 1.5 TB of system RAM on a GPU server. As current GPUs have at most up to 32 GB of on-card memory, this introduced the main bottleneck of system-GPU data transfers.
+    On the other hand, for our implementation of the enumeration approach, using only on-card memory is sufficient. Therefore, it also runs on commodity hardware.
+    Instead of the memory bottleneck, the enumeration algorithm leads to a lot of diverging execution that is not well-suited for GPU architectures.
+    Mitigating that problem is the main result of this work.
+
+    \paragraph{Contribution}
+    We provide an implementation of the lattice enumeration algorithm that is able to use the extensive parallization capacities provided by GPUs and is able to achieve a speedup of up to 5 compared to a multithreaded state-of-the-art implementation \cite{fplll}.
+    For this, we used the CUDA technology by Nvidia that provides a high-level language for programming Nvidia GPUs \cite{cuda}.
+    %The great amount of features and available tools make it the de-facto standard technology for building general purpose GPU applications, although open source alternatives like OpenCL exist.
+    
+    To design the algorithm, we focused on the view of lattice enumeration as a depth-first tree search, and designed an algorithm that is optimized for GPUs and the concrete structure of this tree. 
+    In general, tree algorithms are not optimal for GPU architectures, because they usually require irregular, non-local memory accesses and non-uniform branching.
+    By using the properties of the enumeration tree however, we partly circumvent these problems and achieve better performance than in the case of DFS in general trees, as studied e.g. in \cite{tree_search_cuda}.
+
+    \section{Preliminaries}
+
+    \subsection{Lattices}
+
+    A lattice is a discrete subgroup $L \subseteq \R^n$. Each lattice is of the form $L = b_1 \Z + ... + b_m \Z = \mathrm{rowsp}_{\Z}(B)$ for linearly independent $b_i$ resp. a matrix $B \in \R^{m \times n}$ with rows $b_i$. 
+    These $b_i$ are called basis of the lattice $L$, and are in general not unique. 
+    In particular, two bases (given as their matrices) $B$ and $B'$ generate the same lattice, if and only if $B' = UB$ for some $U \in \Z^{m \times m}$ is unimodular.
+    The number $m$ is called the rank of the lattice. Usually, we will consider full-rank lattices, i.e. $m = n$.
+
+    For a given lattice $L$, there is a (non-unique) nonzero vector $v \in L$ of smallest euclidean norm. This norm is denoted by $\lambda(L) := \min_{v \in L \setminus \{0\}} \| v \|$. 
+    Now consider the so-called shortest vector problem (SVP): Given a basis $B \in \Z^{n \times n}$ that generates a full-rank lattice $L$, compute a point $x \in L \setminus \{0\}$ such that $\| x \| = \lambda(L)$. 
+    To solve this problem exactly, there are mainly two approaches: The lattice enumeration algorithm, as described in Section \ref{sec:enumeration}, and lattice sieve algorithms \cite{sieve}, \cite{g6k}.
+
+    \subsection{Gram-Schmidt orthogonalization}
+
+    Given a matrix $B \in \R^{n \times n}$ with rows $b_1, ..., b_n$, the Gram-Schmidt process yields the projections $b^*_i$ of $b_i$ into $\langle b_1, ..., b_{i - 1} \rangle ^ \perp$. With the matrix $B^*$ formed by the rows $b^*_i$, this results in $B = \mu B^*$ where $\mu$ is a lower triangle matrix with a diagonal of $1$s. Furthermore, for $i \neq j$ the vectors $b^*_j \perp b^*_j$ are perpendicular, so the matrix $\mathrm{diag}( {\|b^*_1\|}^{-1}, ..., {\|b^*_n\|}^{-1} ) B^*$ is orthonormal.
+
+    The SVP problem is invariant under linear isometries, i.e. given a lattice $L$ generated by a basis $B$ and an orthonormal matrix $T$, have $\lambda(TL) = \lambda(L)$. Additionally, a solution to SVP in $TL$ can be easily transformed into a solution to SVP in $L$ and vice versa.
+    Hence, to solve SVP it is sufficient to consider the matrix $\mu$ of Gram-Schmidt coefficients and the length of the Gram-Schmidt vectors $\| b^*_i \|$. This can also be seen from the result in \ref{sec:enumeration}, which is independent from the concrete basis $b_1, ..., b_n$.
+
+    \subsection{The CUDA programming model}
+
+    CUDA is a language extension of C++ that allows writing code for execution on GPUs \cite{cuda}. The only difference between a CUDA application and a standard C++ one is that the former can define and call ``kernels'', which are similar to functions but are executed on the GPU. As GPUs are optimized for heavily parallel algorithms, starting a kernel usually means starting thousands of GPU threads, all executing the same code in the kernel. These threads are grouped into the following units:
+
+    \begin{description}
+        \item[Warp] The smallest unit of threads; On all current architectures, a warp consists of 32 threads. In CUDA, a thread is just a logical concept, and the hardware works directly with warps. As a result, all threads in a warp classically share a program counter, so they execute the same instruction at same time. 
+        
+        There are two important consequences impacting the performance: If threads in the same warp take different paths during conditional code execution, these paths are executed sequentially, and all threads that did not take the current path are idle. Therefore, for high throughput, it is essential to avoid divergent code within a warp.
+        The second point deals with memory access. If threads within a warp access sequential words in memory, all of them can be done by the memory controller in one step (called ``coalesced'' memory access). These coalesced memory accesses are crucial for avoiding huge memory latencies.
+        
+        \item[Block] Up to 1024 threads can be grouped in a block. Within a block, it is possible to use barrier-style synchronization. Except in very recent versions of CUDA, it is impossible to synchronize threads between blocks (however, atomics are available). Apart from this, one can allocate so-called ``shared memory'' that can be accessed by all threads within a block. 
+        Shared memory is scarce (up to 100KB per block), but accesses are significantly faster than the RAM-like global memory.
+    
+        \item[Grid] The grid is the logical collection of all blocks that are started for the current kernel.
+    \end{description}
 
     \section{Approach}
 
+    \label{sec:enumeration}
+
     \subsection{Lattice Enumeration}
 
-    Given an $n$-dimensional lattice $L$ with basis $b_1, ..., b_n$, consider the projections $\pi_k$ into the space $\langle b_1, ..., b_k \rangle^\perp$. Then the idea of lattice enumeration is to begin with the origin $0 \in \pi_n L = \{ 0 \}$ and repeatedly expand points of norm $\leq r$ in $\pi_{k + 1} L$ to multiple points of norm $\leq r$ in $\pi_k L$.
+    In this section, we will describe the Kannan-Fincke-Pohst enumeration algorithm \cite{enum1}, \cite{enum}, as it is used in \cite{fplll}.
+
+    Given an $n$-dimensional lattice $L$ with basis $b_1, ..., b_n$, consider the projections $\pi_k$ onto the space $\langle b_1, ..., b_k \rangle^\perp$. Then the idea of lattice enumeration is to begin with the origin $0 \in \pi_n L = \{ 0 \}$ and repeatedly expand points of norm $\leq r$ in $\pi_{k + 1} L$ to multiple points of norm $\leq r$ in $\pi_k L$.
     
-    For $p \in \pi_{k + 1} L$ of norm $\| p \| \leq r$ we call all points $p' \in \pi_k L$ of norm $\| p' \| \leq r$ with $\pi_{k + 1} p' = p$ the children of $p$. As the projections do not increase the norm of vectors, have that for $p \in \pi_k$ with norm $\| p \| \leq r$, also $\pi_{k + 1} p \in \pi_{k + 1}L$ is of norm $\leq r$. Therefore, considering the children of each point in $\pi_{k + 1}L$ of norm $\leq r$ yield exactly all points in $\pi_k L$ of norm $\leq r$.
+    For $p \in \pi_{k + 1} L$ of norm $\| p \| \leq r$ we call all points $p' \in \pi_k L$ of norm $\| p' \| \leq r$ with $\pi_{k + 1} p' = p$ the children of $p$. As the projections do not increase the norm of vectors, have that for $p \in \pi_k L$ with norm $\| p \| \leq r$, also $\pi_{k + 1} p \in \pi_{k + 1}L$ is of norm $\leq r$. Therefore, considering the children of each point in $\pi_{k + 1}L$ of norm $\leq r$ yield exactly all points in $\pi_k L$ of norm $\leq r$.
 
-    As the use of ``children'' already indicates, this defines a tree, the enumeration tree, with root $0$ in which each maximal path has length $n + 1$, where the leaf nodes are exactly all lattice points of norm $\leq r$.
-    This tree is then searched with a depth-first strategy, and the shortest nonzero leaf node is returned.
+    As the use of ``children'' already indicates, this defines a tree which we call the enumeration tree. This tree has root $0$ and each maximal path has length $n + 1$. Additionally, the leaf nodes are exactly given by the lattice points of norm $\leq r$.
+    The standard method is now to perform a depth-first search on this tree, and return the shortest nonzero leaf node that was encountered.
 
-    Therefore, the fundamental operation of the algorithm is the calculation of all children points. Usually, instead of storing the points $p \in \pi_k L$, the coefficients w.r.t $\pi_k b_i$ are stored. In this case, on tree level $n - k$, each point $p \in \pi_k L$ has a representation $p = \pi_k \sum_{i = k + 1}^n x_i b_i , \ x_i \in \Z$, so the coefficients for $b_1, ..., b_k$ are zero. It follows that the children $p'$ of a point $p = \pi_k \sum_{i = k + 1}^n x_i b_i$ are characterized by their coefficient $x_k$, so they are of the form
+    Therefore, the fundamental operation of the algorithm is the calculation of all children points. Usually, instead of storing the points $p \in \pi_k L$, the coefficients w.r.t the orthogonal basis $\pi_k b_i$ are stored. In this case, on tree level $n - k$, each point $p \in \pi_k L$ has a representation $p = \pi_k \sum_{i = k + 1}^n x_i b_i , \ x_i \in \Z$, so the coefficients for $b_1, ..., b_k$ can be chosen to be zero. It follows that the children $p'$ of a point $p = \pi_k \sum_{i = k + 1}^n x_i b_i$ are characterized by their coefficient $x_k$, so they are of the form
     
     \begin{equation*}
-        p' = \pi_{k - 1}\sum_{i = k}^n x_i b_i \quad \text{where} \ \left|\|b_k^*\|x_k + \sum_{i = k + 1}^n x_i \mu_{ki} \right| \leq \sqrt{r^2 - \|p\|^2}, \ x_k \in \Z
+        p' = \pi_{k - 1}\sum_{i = k}^n x_i b_i \quad \text{where} \quad \|b_k^*\| \ \Bigl|x_k + \sum_{i = k + 1}^n x_i \mu_{ki} \Bigr| \leq \sqrt{r^2 - \|p\|^2}, \ x_k \in \Z
     \end{equation*}
     which can be easily seen by calculating $\|p'\|$
     \begin{align*}
-        \|p'\| = &\| \pi_{k - 1}\sum_{i = k}^n x_i b_i \|^2 = \left(\frac 1 {\langle b_k^*, b_k^* \rangle} \langle b_k^*, \sum_{i = k}^n x_i b_i \rangle \right)^2 + \| \pi_k \sum_{i = k}^n x_i b_i \|^2 \\
-        = &\left( \sum_{i = k}^n x_i\mu_{ki} \right)^2 + \| \pi_k \sum_{i = k + 1}^n x_i b_i \|^2 = \| p \|^2 + \left( x_k\|b_k^*\| + \sum_{i = k + 1}^n x_i \mu_{ki} \right)^2
+        \|p'\|^2 =\ &\Bigl\| \pi_{k - 1}\sum_{i = k}^n x_i b_i \Bigr\|^2 = \Bigl\| b^*_k \frac 1 {\langle b^*_k, b^*_k \rangle} \langle b^*_k, \sum_{i = k}^n x_i b_i \rangle + \pi_k \sum_{i = k}^n x_i b_i \Bigr\|^2 \\
+        =\ &\frac {\| b_k^* \|^2} {\langle b^*_k, b^*_k \rangle^2} \langle b_k^*, \sum_{i = k}^n x_i b_i \rangle^2 + \Bigl\| \pi_k \sum_{i = k}^n x_i b_i \Bigr\|^2 \\
+        =\ &\| b^*_k \| ^2 \Bigl( \sum_{i = k}^n x_i\mu_{ki} \Bigr)^2 + \Bigl\| \pi_k \sum_{i = k + 1}^n x_i b_i \Bigr\|^2 = \|b_k^*\|^2 \Bigl( x_k + \sum_{i = k + 1}^n x_i \mu_{ki} \Bigr)^2 + \| p \|^2
     \end{align*}
     Iterating over all children is therefore equivalent to iterate over all integers $x_k$ between
     \begin{equation*}
-        -\sum_{i = k + 1}^n x_i \mu_{ki} - \sqrt{r^2 - \|p\|^2} \ \leq \ x_k \ \leq \ -\sum_{i = k + 1}^n x_i \mu_{ki} + \sqrt{r^2 - \|p\|^2}
+        -\sum_{i = k + 1}^n x_i \mu_{ki} - \frac {\sqrt{r^2 - \|p\|^2}} {\| b_k^* \|} \ \leq \  x_k \ \leq \ -\sum_{i = k + 1}^n x_i \mu_{ki} + \frac {\sqrt{r^2 - \|p\|^2}} {\| b_k^* \|}
     \end{equation*}
+
+    This directly shows that each node has at most $2r/\| b_k^* \|$ children, giving a running time of $\exp({O(n^2)})$ on a LLL-reduced basis with $r = \| b_1 \| \in O(2^{n/2}) \| b_k^* \|$. 
+    A more thorough analysis shows that under the right reduction assumptions on the input basis, the enumeration algorithm has a running time of $2^{O(n\log n)}$ \cite{enum1}, \cite{enum_complexity}.
 
     \subsubsection{The partial center sums}
 
     \label{sec:center_partsums}
-    The real work is therefore calculating this sum $\sum_{i = k + 1}^n c_i \mu_{ki}$, often called \texttt{center} as it is the center of the interval from which to choose $c$. By keeping track of all the partial sums $\sum_{i=k}^n c_i \mu_{li}$ for $l < k$, the center is always available, and updating the partial sums requires $n - k$ multiplications on tree level $n - k$.
+    As a result, the real work is computing the sum $\sum_{i = k + 1}^n x_i \mu_{ki}$, often called \texttt{center} as it is the center of the interval from which to choose $x_k$. By keeping track of all the partial sums $\sum_{i=k}^n x_i \mu_{li}$ for $l < k$, the center is always available, and updating the partial sums requires $n - k$ multiplications on tree level $n - k$.
 
     \subsubsection{Decrease enumeration bound}
 
     \label{sec:enum_bound}
-    When finding any leaf node in the enumeration tree, this node corresponds to a lattice point $x \in L$. If $x \neq 0$, we know that there is a lattice point of norm $\leq \|x\|$ in the lattice, so to find the shortest one, it suffices now to search only the points of norm $\leq \|x\|$. In other word, we can potentially decrease the enumeration bound $r$ by $r := \min \{ r, \|x\| \}$ (there is some complication because of rounding errors during floating point arithmetic, see ToDo), which can significantly reduce the size of the tree. Therefore, finding leaf nodes as early as possible is important for a fast algorithm.
+    When finding any leaf node in the enumeration tree, this node corresponds to a lattice point $x \in L$. If $x \neq 0$, we know that there is a lattice point of norm $\leq \|x\|$ in the lattice, so to find the shortest one, it suffices now to search only the points of norm $\leq \|x\|$. In other word, we can potentially decrease the enumeration bound $r$ by $r := \min \{ r, \|x\| \}$ (there is some complication because of rounding errors during floating point arithmetic, see \cite{enum_numerics}), which can significantly reduce the size of the tree. Therefore, finding leaf nodes as early as possible is important for a fast algorithm.
 
     The basic algorithm therefore looks like this
 
     \begin{algorithm}[H]
-        \caption{Find tree node children \label{alg:children_iter}\\Input: parent coefficients $x_{k + 1}, ..., x_n$, parent norm $\|p\|^2$, partial center sums $\sum_i x_i \mu_{li}$ for $l < k$, matrix $(\mu_{ij})$}
+        \caption{Find tree node children \label{alg:children_iter}\\\textbf{Input}: parent coefficients $x_{k + 1}, ..., x_n$, parent norm $\|p\|^2$, partial center sums $\sum_i x_i \mu_{li}$ for $l < k + 1$, matrix $(\mu_{ij})$}
         \begin{algorithmic}
-            \STATE Set $\mathrm{center} := \sum_{i = k + 1}^n c_i \mu_{ij}$
+            \STATE Set $\mathrm{center} := \sum_{i = k + 1}^n x_i \mu_{kj}$
             \STATE Set $x_0 = \lfloor \mathrm{center} \rceil$
             \STATE Set $\delta = 1$ if $\mathrm{center} \geq x_0$, otherwise $\delta = -1$
             \FORALL{$x \in \{ x_0, x_0 + \delta, x_0 - \delta, x_0 + 2\delta, ... \}$}
-                \STATE If $|x - x_0|^2 > r^2 - \| p \|^2$, exit
+                \STATE If $(x - \mathrm{center})^2 \| b^*_k \|^2 + \| p \|^2 > r^2$, exit
                 \STATE Otherwise, yield the point $p'$ with coefficients $(x, x_{k + 1}, ..., x_n)$ and norm $\|p'\|^2 = \|p\|^2 + (x - \mathrm{center})^2 \|b_k^*\|^2$
             \ENDFOR
         \end{algorithmic}
     \end{algorithm}
-
-    \subsection{The CUDA programming model}
-
-    ToDo
 
     \subsection{Parallelization of the Lattice Enumeration}
 
@@ -101,7 +187,7 @@
     In some more detail, this is described in \ref{alg:warp_enum}. For finding the coefficients of the points $\mathrm{children}^k(\{x_i\})$ in the algorithm, an adaption of the efficient (but branching) recursive enumeration procedure from fplll is used. It also uses the previously calculated partial center sum values (see \ref{sec:center_partsums}).
 
     \begin{algorithm}[H]
-        \caption{Intra-warp enumeration \label{alg:warp_enum}\\Input: subtree root $r$}
+        \caption{Basic intra-warp enumeration\label{alg:warp_enum}\\\textbf{Input}: subtree root $r$ (with data required for Alg. \ref{alg:children_iter}), matrix $(\mu)_{ij}$}
         \begin{algorithmic}
             \STATE Init buffer with single node $r$
             \WHILE{node buffer is not empty}
@@ -109,9 +195,10 @@
                 \STATE If such a $l$ does not exist, use highest level with $\neq 0$ nodes
                 \STATE Assign one node $x_i$ on level $l$ to each thread $i \in \{0, ..., 31\}$
                 \IF{$l$ is leaf level of enumeration tree}
-                    \STATE If $x_i$ is nonzero and shorter than the current optimal solution, update it
+                    \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter} recursivly
+                    \STATE If one of these is $\neq 0$ and shorter than the current optimal solution, update it
                 \ELSE
-                    \STATE Thread $i$ gets all transitive children points $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter}
+                    \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter} recursivly
                     \STATE Store their coefficients and norms
                     \STATE Calculate new partial center sums with a parallelized matrix-matrix multiplication
                 \ENDIF
@@ -119,31 +206,94 @@
         \end{algorithmic}
     \end{algorithm}
 
+    \subsection{Parameters}
+
+    To balance the cost induced by memory accesses, the percentage of cases in which there are not enough tasks for all threads and the time threads of the same warp have to wait for each other, we have introduced algorithm parameters that control the thresholds used in the algorithm:
+    
+    \begin{description}
+        \item[$k =$ \texttt{dimensions\_per\_level}]
+            As described above, this is the amount of enumeration tree levels that are expanded using Alg. \ref{alg:children_iter}, before resulting nodes are written into the buffer. The name \texttt{dimensions\_per\_level} refers not to the levels of the enumeration tree, but to the levels of the ``compacted'' enumeration tree, in which each level corresponds to $k$ levels of the original tree. From this perspective, the $\mathrm{children}^k(\{x_i\})$ are the direct children of $x_i$ in the compacted tree.
+        \item[$T =$ \texttt{max\_subtree\_paths}] 
+            During the calculation of $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter}, if more than $T$ leaves resp. root-leaf-paths of the induced small subtree are found, the thread stops, and processing on the node will continue later. This can prevent threads from waiting for the computation on a very big subtree, but different subtree structures can still cause suspended threads. 
+        \item[$p =$ \texttt{min\_active\_parents\_percentage}]
+            This parameter is used to determine on which level nodes should be processed in the current step. Using the deepest level with $\geq 32$ nodes as in Alg. \ref{alg:warp_enum} does not work, as we store a reference to its parent for each node. Therefore, a node cannot be deleted before all its children are, otherwise, the parent reference would be invalid. 
+            
+            If after processing a level, the fraction of nodes that are not finished falls below $p$, we completely process all nodes in the buffer below the current level, and then delete the parents.
+        \item[$N_1 =$ \texttt{initial\_nodes\_per\_group}]
+            This is the count of subtree roots the buffer is initialized with in the first step; As opposed to Alg. \ref{alg:warp_enum}, this may be greater than 1.
+        \item[$N_2 =$ \texttt{thread\_count}]
+            The total count of CUDA threads that will be started. 
+    \end{description}
+
+    Including these additional ideas yields the following algorithm:
+    \begin{algorithm}[H]
+        \caption{Improved intra-warp enumeration\label{alg:warp_enum_complex}\\Input: list of subtree roots, whose subtrees are to be searched}
+        \begin{algorithmic}
+            \STATE Start $\lceil N_2 / 32 \rceil$ warps with $32$ threads each, that each execute the following:
+            \STATE Atomically (w.r.t all warps), get next $N_1$ root nodes $r_1, ..., r_n$ from the input list
+            \IF{No root nodes are left in the list}
+                \STATE Terminate the current warp; If all warps are done, the algorithm is finished
+            \ENDIF
+            \STATE Initialize the (shared by the threads in a warp) node buffer with $r_1, ..., r_n$
+            \STATE Set the current level $l := 0$
+            \WHILE{node buffer is not empty}
+                \WHILE{the last $32$ nodes of buffer contain more than $32 \cdot p$ unfinished ones \textbf{and} new children points fit into the buffer}
+                    \STATE Assign one node $x_i$ on level $l$ to each thread $i \in \{0, ..., 31\}$
+                    \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter} recursivly (evtl. resume an old computation);
+                    If their count exceeds $T$, stop and update the buffer, so that Alg. \ref{alg:children_iter} can be resumed later
+                    \IF{$l$ is leaf level of enumeration tree}
+                        \STATE If one of these is $\neq 0$ and shorter than the current optimal solution, update it
+                    \ELSE
+                        \STATE Store their coefficients and norms
+                        \STATE Calculate new partial center sums with a matrix-matrix multiplication
+                    \ENDIF
+                \ENDWHILE
+                \IF{children points have been added to the buffer during the above loop}
+                    \STATE Process the newly generated children points in the next step, i.e. set $l := l + 1$
+                \ELSE
+                    \STATE Delete finished nodes among the last $32$ ones on level $l$ from the buffer
+
+                    Note that here, there are no children that might refer to the deleted nodes
+                    \IF{the buffer contains no nodes on level $l$}
+                        \STATE Go one level up, i.e. $l := l - 1$
+                    \ENDIF
+                \ENDIF
+            \ENDWHILE
+            \STATE Goto the beginning
+        \end{algorithmic}
+    \end{algorithm}
+
+    In experiments, the following set of parameters has yielded the best results
+    
+    \begin{center}
+        \begin{tabular}[5]{c c c c c}
+            $k$ & $T$ & $p$ & $N_1$ & $N_2$ \\
+            $3$ & $50$ & $0.5$ & $8$ & $32 \cdot 256$
+        \end{tabular}
+    \end{center}
+
     \section{Performance}
 
     % The running time of enumeration in general depends strongly on the structure of the enumeration tree, for example how short lattice vectors are distributed (see \ref{sec:enum_bound}).
 
-    The following benchmark was done on a machine with an Intel core i7-7700K CPU and a GeForce GTX 1080 Ti GPU. As a comparison for the CUDA implementation, we use the multithreaded enumeration algorithm from the fplll library.
+    The following benchmark was done on a machine with an Intel core i7-7700K CPU and a GeForce GTX 1080 Ti GPU. As a comparison for the CUDA implementation, we use the multithreaded enumeration algorithm from the fplll library \cite{fplll}.
     For each dimension, four knapsack matrices with a uniform 350-bit column were used as lattice, and the graph shows the median of the running time of both implementations. The matrices can also be reproduced using the tool latticegen from the fplll library (via \texttt{latticegen -randseed \$s r \$dim 350} for $s \in \{0, 1, 2, 3\}$).
-    The results are displayed in figure \ref{fig:perf_graph}.
+    The results are displayed in Figure \ref{fig:perf_graph}.
 
     \begin{figure}[H]
         \begin{tikzpicture}
             \begin{axis}[
-                    %ymode=log,
-                    axis x line=center,
-                    axis y line=center,
-                    ylabel={ms},
+                    ymode=log,
+                    ylabel={min},
                     xlabel={dim},
                     xmin=48,
-                    ymax=1.5e7,
                     width=\textwidth
                 ]
                 
-                \addplot+[mark=none, discard if not={type}{cu-med}, red] table[x=dim, y=time] {performance.dat} node[above, pos=.7] {cuda};
-                \addplot+[mark=none, discard if not={type}{mt-med}, blue] table[x=dim, y=time] {performance.dat} node[left, pos=.88] {multithreaded};
-                \addplot+[dashed, mark=none, discard if not={type}{cu-fit}, red] table[x=dim, y=time] {performance.dat} node[below, pos=.6] {cuda (fit)};
-                \addplot+[dashed, mark=none, discard if not={type}{mt-fit}, blue] table[x=dim, y=time] {performance.dat} node[left, pos=.88] {multithreaded (fit)};
+                \addplot+[mark=none, discard if not={type}{cu-med}, red] table[x=dim, y=time] {performance.dat} node[above, pos=.7] {CUDA};
+                \addplot+[mark=none, discard if not={type}{mt-med}, blue] table[x=dim, y=time] {performance.dat} node[left, pos=.88] {Multithreaded};
+                \addplot+[dashed, mark=none, discard if not={type}{cu-fit}, red] table[x=dim, y=time] {performance.dat} node[below, pos=.6] {};
+                \addplot+[dashed, mark=none, discard if not={type}{mt-fit}, blue] table[x=dim, y=time] {performance.dat} node[left, pos=.88] {};
             
                 \addplot+[only marks, red, mark=x, discard if not={type}{cu-0}] table[x=dim, y=time] {performance.dat};
                 \addplot+[only marks, red, mark=x, discard if not={type}{cu-1}] table[x=dim, y=time] {performance.dat};
@@ -157,7 +307,50 @@
 
             \end{axis}
         \end{tikzpicture}
-        \caption{Performance of cuda enumeration (red) and multithreaded enumeration (blue)\label{fig:perf_graph}; some data points are clipped}
+        \caption{Performance of CUDA enumeration (red) and multithreaded enumeration (blue)\label{fig:perf_graph}, the dashed lines are exponential regression curves; some data points are clipped}
     \end{figure}
+
+    \subsection{Pruning}
+
+    Usually, lattice enumeration is used as a subroutine in the BKZ or similar algorithms \cite{bkz}. These provide speed-length tradeoffs by using the enumeration on sublattices or projections of the lattice of smaller dimension. By choosing the dimension of the enumerated lattices appropriately, working with lattices of much greater dimension is possible. A technique that can significantly reduce the enumeration time is to work with a reduced enumeration radius, risking that no lattice point within the bound exists \cite{pruning}, \cite{bkz2}. If no lattice point was found by the enumeration, the basis is randomized and the enumeration is applied again. This reduces the ``denseness'' of the enumeration tree, which leads to more branching during the algorithm. If the dimension of the enumerated lattice is high enough however (corresponds to the BKZ block size), the CUDA algorithm has a similar advantage as in the benchmark without pruning. The results seen in Table \ref{tab:pruning_bench} are obtained on the same system as above, by applying the fplll BKZ implementation with block size 53 and standard fplll pruning parameters to a random, 100-dimensional, 300-bit knapsack matrix (i.e. \texttt{latticegen r 100 300 | ./fplll -a bkz -b 53}). 
+    Note that during a single BKZ tour, enumerations on different block sizes are performed (usually, the block size decreases at the end of the tour). Also, the more tours have been executed, the more reduced the lattice is, so later tours may be faster than earlier ones. An exemplary running time comparison over multiple BKZ tours on one lattice can be seen in Figure \ref{fig:bkz_graph}. 
+    The random seed of 3 was chosen to use different lattices from Table \ref{tab:pruning_bench}.
+
+    \begin{figure}
+        \begin{tabular}{c c c c}
+            ~ & Time (min) & Executed BKZ tours & Time per tour (min) \\
+            Multithreaded & 1462, 1190 & 7, 2 & 209, 595 \\
+            CUDA & 769, 630 & 6, 4 & 128, 158
+        \end{tabular}
+        \caption{Performance of both enumerations as part of BKZ, with pruning; data for different matrices are comma-separated\label{tab:pruning_bench}}
+    \end{figure}
+
+    \begin{figure}[H]
+        \begin{tikzpicture}
+            \begin{axis}[
+                    %ymode=log,
+                    axis x line=center,
+                    axis y line=center,
+                    ylabel={min},
+                    xlabel={n-th enumeration},
+                    width=\textwidth
+                ]
+                
+                \addplot+[only marks, mark=x, red] table[x expr=\coordindex + 1, y=time] {bkz_times_cu.dat} node[above, pos=.7] {};
+                \addplot+[only marks, mark=x, blue] table[x expr=\coordindex + 1, y=time] {bkz_times_mt.dat} node[left, pos=.88] {};
+                
+                \addplot+[mark=none, red] table[x expr=\coordindex + 1, y=avg] {bkz_times_cu.dat} node[right, pos=.6] {CUDA (avg)};
+                \addplot+[mark=none, blue] table[x expr=\coordindex + 1, y=avg] {bkz_times_mt.dat} node[right, pos=.2] {Multithreaded (avg)};
+                
+            \end{axis}
+        \end{tikzpicture}
+        \caption{Performance of enumerations during one BKZ execution with block size 53 (on lattice from \texttt{./latticegen -randseed 3 r 100 300}); the averages are taken over five consecutive values\label{fig:bkz_graph}}
+    \end{figure}
+
+    \section{Source Code}
+
+    Currently, the source code can be found at \href{https://github.com/FeanorTheElf/fplll-CUDA-enumeration}{github.com/FeanorTheElf/fplll-CUDA-enumeration}. It is possible that it will be moved to the fplll organization \href{https://github.com/fplll}{github.com/fplll} soon.
+
+    \printbibliography
 
 \end{document}

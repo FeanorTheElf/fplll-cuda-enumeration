@@ -35,7 +35,7 @@
     \maketitle
     
     \begin{abstract}
-    The Kannan-Fincke-Pohst lattice enumeration algorithm is the classical method for solving the shortest vector problem. It is also a fundamental tool for most lattice reduction algorithms that provide speed-length tradeoffs. 
+    The Kannan-Fincke-Pohst lattice enumeration algorithm is the classical method for solving the shortest vector problem in lattices. It is also a fundamental tool for most lattice reduction algorithms that provide speed-length tradeoffs. 
     As this algorithm allows efficient parallel implementations, it is likely that implementing it on modern GPUs can significantly improve performance. 
     We provide such an implementation that is compatible with the fplll lattice reduction library \cite{fplll} and achieves a considerable speedup in higher lattice dimensions, compared to current, multithreaded versions.
     For this, we use the CUDA technology that provides an abstract language for programming GPUs.
@@ -48,10 +48,13 @@
     A lattice is a free $\Z$-submodule of the $d$-dimensional Euclidean space. Lattices are usually considered together with the norm from this space, which then gives rise to interesting computational problems.
     The most fundamental is the shortest vector problem (SVP), which is to find a shortest, nonzero lattice vector given a lattice basis. 
     This problem is often used as a basis for cryptography, as it is conjectured to be extremely hard, even in approximative versions.
+    In particular, the security of many promising candidates for post-quantum cryptography can be reduced to SVP. 
+    Therefore, a good understanding of its theoretically and practical hardness is important.
 
     To solve this problem exactly, there are two main approaches:
-    The classical method is the Kannan-Fincke-Pohst lattice enumeration \cite{enum1}, \cite{enum}, which performs an exhaustive search on all lattice points of a bounded norm. The advantages of this algorithm are mainly that it requires only polynomially much memory and is easily parallelizable. Additionally, many optimizations have been introduced, the most important one being pruning \cite{pruning}.
-    However, the running time is super-exponential and therefore not asymptotically optimal, while the space complexity is only polynomial.
+    The classical method is the Kannan-Fincke-Pohst lattice enumeration \cite{enum1}, \cite{enum}, which performs an exhaustive search on all lattice points of a bounded norm. 
+    In practice, this algorithm performs very well, also because many improvements have been introduced.
+    However, the time complexity is super-exponential and therefore not asymptotically optimal, while the space complexity is only polynomial.
     The other approach is lattice sieving \cite{sieve} which yield exponential running times, at the cost of needing exponential space. 
     A lot of work in this field has recently made this approach competitive.
     Nevertheless, lattice enumeration is still widely used and for dimensions up to 70 the best known algorithm \cite{g6k}.
@@ -67,7 +70,7 @@
     Mitigating that problem is the main result of this work.
 
     \paragraph{Contribution}
-    We provide an implementation of the lattice enumeration algorithm that is able to use the extensive parallization capacities provided by GPUs and is able to achieve a speedup of up to 5 compared to a multithreaded state-of-the-art implementation \cite{fplll}.
+    We provide an implementation of the lattice enumeration algorithm that is able to use the extensive parallelization capacities provided by GPUs and is able to achieve a speedup of up to 5 compared to a multithreaded state-of-the-art implementation \cite{fplll}.
     For this, we used the CUDA technology by Nvidia that provides a high-level language for programming Nvidia GPUs \cite{cuda}.
     %The great amount of features and available tools make it the de-facto standard technology for building general purpose GPU applications, although open source alternatives like OpenCL exist.
     
@@ -81,18 +84,18 @@
 
     A lattice is a discrete subgroup $L \subseteq \R^n$. Each lattice is of the form $L = b_1 \Z + ... + b_m \Z = \mathrm{rowsp}_{\Z}(B)$ for linearly independent $b_i$ resp. a matrix $B \in \R^{m \times n}$ with rows $b_i$. 
     These $b_i$ are called basis of the lattice $L$, and are in general not unique. 
-    In particular, two bases (given as their matrices) $B$ and $B'$ generate the same lattice, if and only if $B' = UB$ for some $U \in \Z^{m \times m}$ is unimodular.
+    In particular, two bases (given as their matrices) $B$ and $B'$ generate the same lattice, if and only if $B' = UB$ for some unimodular $U \in \Z^{m \times m}$ holds.
     The number $m$ is called the rank of the lattice. Usually, we will consider full-rank lattices, i.e. $m = n$.
 
-    For a given lattice $L$, there is a (non-unique) nonzero vector $v \in L$ of smallest euclidean norm. This norm is denoted by $\lambda(L) := \min_{v \in L \setminus \{0\}} \| v \|$. 
+    For a given lattice $L$, there is a (non-unique) nonzero vector $v \in L$ of smallest Euclidean norm. This norm is denoted by $\lambda(L) := \min_{v \in L \setminus \{0\}} \| v \|$. 
     Now consider the so-called shortest vector problem (SVP): Given a basis $B \in \Z^{n \times n}$ that generates a full-rank lattice $L$, compute a point $x \in L \setminus \{0\}$ such that $\| x \| = \lambda(L)$. 
     To solve this problem exactly, there are mainly two approaches: The lattice enumeration algorithm, as described in Section \ref{sec:enumeration}, and lattice sieve algorithms \cite{sieve}, \cite{g6k}.
 
     \subsection{Gram-Schmidt orthogonalization}
 
-    Given a matrix $B \in \R^{n \times n}$ with rows $b_1, ..., b_n$, the Gram-Schmidt process yields the projections $b^*_i$ of $b_i$ into $\langle b_1, ..., b_{i - 1} \rangle ^ \perp$. With the matrix $B^*$ formed by the rows $b^*_i$, this results in $B = \mu B^*$ where $\mu$ is a lower triangle matrix with a diagonal of $1$s. Furthermore, for $i \neq j$ the vectors $b^*_j \perp b^*_j$ are perpendicular, so the matrix $\mathrm{diag}( {\|b^*_1\|}^{-1}, ..., {\|b^*_n\|}^{-1} ) B^*$ is orthonormal.
+    Given a matrix $B \in \R^{n \times n}$ with rows $b_1, ..., b_n$, the Gram-Schmidt process yields the projections $b^*_i$ of $b_i$ onto $\langle b_1, ..., b_{i - 1} \rangle ^ \perp$. With the matrix $B^*$ formed by the rows $b^*_i$, this results in $B = \mu B^*$ where $\mu$ is a lower triangle matrix with a diagonal of $1$s. Furthermore, for $i \neq j$ the vectors $b^*_j \perp b^*_j$ are perpendicular, so the matrix $\mathrm{diag}( {\|b^*_1\|}^{-1}, ..., {\|b^*_n\|}^{-1} ) B^*$ is orthonormal.
 
-    The SVP problem is invariant under linear isometries, i.e. given a lattice $L$ generated by a basis $B$ and an orthonormal matrix $T$, have $\lambda(TL) = \lambda(L)$. Additionally, a solution to SVP in $TL$ can be easily transformed into a solution to SVP in $L$ and vice versa.
+    The SVP problem is invariant under linear isometries, i.e. given a lattice $L$ generated by a basis $B$ and an orthonormal matrix $T$, we have $\lambda(TL) = \lambda(L)$. Additionally, a solution to SVP in $TL$ can be easily transformed into a solution to SVP in $L$ and vice versa.
     Hence, to solve SVP it is sufficient to consider the matrix $\mu$ of Gram-Schmidt coefficients and the length of the Gram-Schmidt vectors $\| b^*_i \|$. This can also be seen from the result in \ref{sec:enumeration}, which is independent from the concrete basis $b_1, ..., b_n$.
 
     \subsection{The CUDA programming model}
@@ -195,10 +198,10 @@
                 \STATE If such a $l$ does not exist, use highest level with $\neq 0$ nodes
                 \STATE Assign one node $x_i$ on level $l$ to each thread $i \in \{0, ..., 31\}$
                 \IF{$l$ is leaf level of enumeration tree}
-                    \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter} recursivly
+                    \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter} recursively
                     \STATE If one of these is $\neq 0$ and shorter than the current optimal solution, update it
                 \ELSE
-                    \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter} recursivly
+                    \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter} recursively
                     \STATE Store their coefficients and norms
                     \STATE Calculate new partial center sums with a parallelized matrix-matrix multiplication
                 \ENDIF
@@ -239,7 +242,7 @@
             \WHILE{node buffer is not empty}
                 \WHILE{the last $32$ nodes of buffer contain more than $32 \cdot p$ unfinished ones \textbf{and} new children points fit into the buffer}
                     \STATE Assign one node $x_i$ on level $l$ to each thread $i \in \{0, ..., 31\}$
-                    \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter} recursivly (evtl. resume an old computation);
+                    \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg. \ref{alg:children_iter} recursively (possibly resume an old computation);
                     If their count exceeds $T$, stop and update the buffer, so that Alg. \ref{alg:children_iter} can be resumed later
                     \IF{$l$ is leaf level of enumeration tree}
                         \STATE If one of these is $\neq 0$ and shorter than the current optimal solution, update it
@@ -276,7 +279,7 @@
 
     % The running time of enumeration in general depends strongly on the structure of the enumeration tree, for example how short lattice vectors are distributed (see \ref{sec:enum_bound}).
 
-    The following benchmark was done on a machine with an Intel core i7-7700K CPU and a GeForce GTX 1080 Ti GPU. As a comparison for the CUDA implementation, we use the multithreaded enumeration algorithm from the fplll library \cite{fplll}.
+    The following benchmark was done on a machine with an Intel core i7-7700K CPU and a GeForce GTX 1080 Ti GPU. As a comparison for the CUDA implementation, we use the multithreaded enumeration algorithm from the fplll library \cite{fplll} running on all 8 (logical) cores the CPU offers.
     For each dimension, four knapsack matrices with a uniform 350-bit column were used as lattice, and the graph shows the median of the running time of both implementations. The matrices can also be reproduced using the tool latticegen from the fplll library (via \texttt{latticegen -randseed \$s r \$dim 350} for $s \in \{0, 1, 2, 3\}$).
     The results are displayed in Figure \ref{fig:perf_graph}.
 
@@ -290,8 +293,8 @@
                     width=\textwidth
                 ]
                 
-                \addplot+[mark=none, discard if not={type}{cu-med}, red] table[x=dim, y=time] {performance.dat} node[above, pos=.7] {CUDA};
-                \addplot+[mark=none, discard if not={type}{mt-med}, blue] table[x=dim, y=time] {performance.dat} node[left, pos=.88] {Multithreaded};
+                \addplot+[mark=none, discard if not={type}{cu-med}, red] table[x=dim, y=time] {performance.dat} node[above, pos=1] {CUDA};
+                \addplot+[mark=none, discard if not={type}{mt-med}, blue] table[x=dim, y=time] {performance.dat} node[left, pos=1] {Multithreaded};
                 \addplot+[dashed, mark=none, discard if not={type}{cu-fit}, red] table[x=dim, y=time] {performance.dat} node[below, pos=.6] {};
                 \addplot+[dashed, mark=none, discard if not={type}{mt-fit}, blue] table[x=dim, y=time] {performance.dat} node[left, pos=.88] {};
             
@@ -312,8 +315,17 @@
 
     \subsection{Pruning}
 
-    Usually, lattice enumeration is used as a subroutine in the BKZ or similar algorithms \cite{bkz}. These provide speed-length tradeoffs by using the enumeration on sublattices or projections of the lattice of smaller dimension. By choosing the dimension of the enumerated lattices appropriately, working with lattices of much greater dimension is possible. A technique that can significantly reduce the enumeration time is to work with a reduced enumeration radius, risking that no lattice point within the bound exists \cite{pruning}, \cite{bkz2}. If no lattice point was found by the enumeration, the basis is randomized and the enumeration is applied again. This reduces the ``denseness'' of the enumeration tree, which leads to more branching during the algorithm. If the dimension of the enumerated lattice is high enough however (corresponds to the BKZ block size), the CUDA algorithm has a similar advantage as in the benchmark without pruning. The results seen in Table \ref{tab:pruning_bench} are obtained on the same system as above, by applying the fplll BKZ implementation with block size 53 and standard fplll pruning parameters to a random, 100-dimensional, 300-bit knapsack matrix (i.e. \texttt{latticegen r 100 300 | ./fplll -a bkz -b 53}). 
-    Note that during a single BKZ tour, enumerations on different block sizes are performed (usually, the block size decreases at the end of the tour). Also, the more tours have been executed, the more reduced the lattice is, so later tours may be faster than earlier ones. An exemplary running time comparison over multiple BKZ tours on one lattice can be seen in Figure \ref{fig:bkz_graph}. 
+    Usually, lattice enumeration is used as a subroutine in the BKZ or similar algorithms \cite{bkz}. 
+    These provide speed-length tradeoffs by using the enumeration on sublattices or projections of the lattice of smaller dimension. 
+    By choosing the dimension of the enumerated lattices appropriately, working with lattices of much greater dimension is possible. 
+    A technique that can significantly reduce the enumeration time is to work with a reduced enumeration radius, risking that no lattice point within the bound exists \cite{pruning}, \cite{bkz2}. 
+    If no lattice point was found by the enumeration, the basis is randomized and the enumeration is applied again. 
+    This reduces the ``denseness'' of the enumeration tree, which leads to more branching during the algorithm. 
+    If the dimension of the enumerated lattice is high enough however (corresponds to the BKZ block size), the CUDA algorithm has a similar advantage as in the benchmark without pruning. 
+    The results seen in Table \ref{tab:pruning_bench} are obtained on the same system as above, by applying the fplll BKZ implementation with block size 53 and standard fplll pruning parameters to a random, 100-dimensional, 300-bit knapsack matrix (i.e. \texttt{latticegen r 100 300 | ./fplll -a bkz -b 53}). 
+    Note that during a single BKZ tour, enumerations on different block sizes are performed (usually, the block size decreases at the end of the tour). 
+    Also, the more tours have been executed, the more reduced the lattice is, so later tours may be faster than earlier ones. 
+    An exemplary running time comparison over multiple BKZ tours on one lattice can be seen in Figure \ref{fig:bkz_graph}. 
     The random seed of 3 was chosen to use different lattices from Table \ref{tab:pruning_bench}.
 
     \begin{figure}
@@ -336,12 +348,14 @@
                     width=\textwidth
                 ]
                 
-                \addplot+[only marks, mark=x, red] table[x expr=\coordindex + 1, y=time] {bkz_times_cu.dat} node[above, pos=.7] {};
-                \addplot+[only marks, mark=x, blue] table[x expr=\coordindex + 1, y=time] {bkz_times_mt.dat} node[left, pos=.88] {};
+                \addplot+[only marks, mark=x, red] table[x expr=\coordindex + 1, y=time] {bkz_times_cu.dat};
+                \addplot+[only marks, mark=x, blue] table[x expr=\coordindex + 1, y=time] {bkz_times_mt.dat};
                 
-                \addplot+[mark=none, red] table[x expr=\coordindex + 1, y=avg] {bkz_times_cu.dat} node[right, pos=.6] {CUDA (avg)};
-                \addplot+[mark=none, blue] table[x expr=\coordindex + 1, y=avg] {bkz_times_mt.dat} node[right, pos=.2] {Multithreaded (avg)};
+                \addplot+[mark=none, red] table[x expr=\coordindex + 1, y=avg] {bkz_times_cu.dat};
+                \addplot+[mark=none, blue] table[x expr=\coordindex + 1, y=avg] {bkz_times_mt.dat};
                 
+                \node[red] at(axis description cs: 0.9, 0.15) {CUDA (avg)};
+                \node[blue] at(axis description cs: 0.2, 0.7) {Multithreaded (avg)};
             \end{axis}
         \end{tikzpicture}
         \caption{Performance of enumerations during one BKZ execution with block size 53 (on lattice from \texttt{./latticegen -randseed 3 r 100 300}); the averages are taken over five consecutive values\label{fig:bkz_graph}}
@@ -349,7 +363,8 @@
 
     \section{Source Code}
 
-    Currently, the source code can be found at \href{https://github.com/FeanorTheElf/fplll-CUDA-enumeration}{github.com/FeanorTheElf/fplll-CUDA-enumeration}. It is possible that it will be moved to the fplll organization \href{https://github.com/fplll}{github.com/fplll} soon.
+    Currently, the source code can be found at \href{https://github.com/FeanorTheElf/fplll-CUDA-enumeration}{github.com/FeanorTheElf/fplll-CUDA-enumeration}. 
+    It is possible that it will be moved to the fplll organization \href{https://github.com/fplll}{github.com/fplll} soon.
 
     \printbibliography
 

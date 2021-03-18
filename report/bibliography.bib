@@ -1,4 +1,4 @@
-@article{bkz2,
+@InProceedings{bkz2,
 author="Chen, Yuanmi and Nguyen, Phong Q.",
 editor="Lee, Dong Hoon and Wang, Xiaoyun",
 title="BKZ 2.0: Better Lattice Security Estimates",
@@ -8,7 +8,6 @@ publisher="Springer Berlin Heidelberg",
 address="Berlin, Heidelberg",
 pages="1--20",
 abstract="The best lattice reduction algorithm known in practice for high dimension is Schnorr-Euchner's BKZ: all security estimates of lattice cryptosystems are based on NTL's old implementation of BKZ. However, recent progress on lattice enumeration suggests that BKZ and its NTL implementation are no longer optimal, but the precise impact on security estimates was unclear. We assess this impact thanks to extensive experiments with BKZ 2.0, the first state-of-the-art implementation of BKZ incorporating recent improvements, such as Gama-Nguyen-Regev pruning. We propose an efficient simulation algorithm to model the behaviour of BKZ in high dimension with high blocksize ≥{\thinspace}50, which can predict approximately both the output quality and the running time, thereby revising lattice security estimates. For instance, our simulation suggests that the smallest NTRUSign parameter set, which was claimed to provide at least 93-bit security against key-recovery lattice attacks, actually offers at most 65-bit security.",
-isbn="978-3-642-25385-0"
 }
 
 @article{bkz,
@@ -120,17 +119,27 @@ location = {Hersonissos, Greece},
 series = {STOC '01}
 }
 
-@misc{g6k,
-author = {Martin R. Albrecht and Léo Ducas and Gottfried Herold and Elena Kirshanova and Eamonn W. Postlethwaite and Marc Stevens},
-title = {The General Sieve Kernel and New Records in Lattice Reduction},
-howpublished = {Cryptology ePrint Archive, Report 2019/089},
-year = {2019},
-note = {\url{https://eprint.iacr.org/2019/089}},
+@InProceedings{g6k,
+author="Albrecht, Martin R.
+and Ducas, L{\'e}o
+and Herold, Gottfried
+and Kirshanova, Elena
+and Postlethwaite, Eamonn W.
+and Stevens, Marc",
+editor="Ishai, Yuval
+and Rijmen, Vincent",
+title="The General Sieve Kernel and New Records in Lattice Reduction",
+booktitle="Advances in Cryptology -- EUROCRYPT 2019",
+year="2019",
+publisher="Springer International Publishing",
+address="Cham",
+pages="717--746",
+abstract="We propose the General Sieve Kernel (G6K, pronounced /e.si.ka/), an abstract stateful machine supporting a wide variety of lattice reduction strategies based on sieving algorithms. Using the basic instruction set of this abstract stateful machine, we first give concise formulations of previous sieving strategies from the literature and then propose new ones. We then also give a light variant of BKZ exploiting the features of our abstract stateful machine. This encapsulates several recent suggestions (Ducas at Eurocrypt 2018; Laarhoven and Mariano at PQCrypto 2018) to move beyond treating sieving as a blackbox SVP oracle and to utilise strong lattice reduction as preprocessing for sieving. Furthermore, we propose new tricks to minimise the sieving computation required for a given reduction quality with mechanisms such as recycling vectors between sieves, on-the-fly lifting and flexible insertions akin to Deep LLL and recent variants of Random Sampling Reduction.",
 }
 
 @inproceedings{tree_search_cuda,
 author = {Jenkins, John and Arkatkar, Isha and Owens, John D. and Choudhary, Alok and Samatova, Nagiza F.},
-title = {Lessons Learned from Exploring the Backtracking Paradigm on the GPU},
+title = {Lessons Learned from Exploring the Backtracking Para\-digm on the GPU},
 year = {2011},
 publisher = {Springer-Verlag},
 address = {Berlin, Heidelberg},

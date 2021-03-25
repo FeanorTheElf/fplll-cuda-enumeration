@@ -25,9 +25,20 @@ The compilers `nvcc` and `g++` will be found if available on PATH, and `nvcc` is
 
 After the library was build using `make lib`, it is possible to build fplll such that it uses its function for all enumerations. For that, configure the fplll build with `./configure --with-extenum-dir=<absolute_path_to_lib_directory> --with-extenum-lib=cudaenum --with-extenum-func=fplll_cuda_enum` (if you have not build fplll before, a `./autogen.sh` might be necessary). Then build fplll using `make`.
 
+
+# Code organization
+
+Most of the code of this project is contained in header files, as the implementation makes (extremely) heavy use of templates. In particular on the device, this this is the only efficient way to write abstractions. 
+The following files contain significant parts of the implementation
+ - `enum.cuh` contains the actual algorithm, and the main entrypoint is the function `enumerate()`
+ - `recenum.cuh` contains a recursive enumeration (very similar to fplll) that is used as a subroutine
+ - `cuda_wrapper.h` resp. `cuda_wrapper.cu` contain the implementation of the interface to fplll
+ - `streaming.cuh` contains the communication between host and device during the running enumeration (notably, found solution points are passed to the host)
+The other files are either test files or wrap primitives in a way that allows the CPU-only mode, i.e. testing most of the code on a system that has no GPU.
+
 # CUDA Enumeration Idea
 
-In this part, we describe how the enumeration algorithm is parallelized on Cuda Blocks and Threads.
+In this part, we describe how the enumeration algorithm is parallelized on Cuda Blocks and Threads. For detailed information, see the soon-to-be published report.
 
 ## CUDA Blocks vs Warps vs Threads 
 

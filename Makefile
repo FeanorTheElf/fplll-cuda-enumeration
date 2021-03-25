@@ -5,11 +5,16 @@ endif
 endif
 
 NVCC?=nvcc
+
+# CXX is passed as base compiler to nvcc via the -ccbin option
 CXX?=g++
 
 NVCC_FLAGS=--std=c++11
+
+# -g -G generates both host and device debug symbols
 DBG_FLAGS=-g -G -O0 -D NDEBUG
 RLS_FLAGS=-O3 -D NDEBUG
+
 SRC=src/cuda_wrapper.cu
 TEST_SRC=$(SRC) src/test.cpp src/testdata.cpp
 

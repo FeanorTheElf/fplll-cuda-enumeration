@@ -34,6 +34,7 @@ The following files contain significant parts of the implementation
  - `recenum.cuh` contains a recursive enumeration (very similar to fplll) that is used as a subroutine
  - `cuda_wrapper.h` resp. `cuda_wrapper.cu` contain the implementation of the interface to fplll
  - `streaming.cuh` contains the communication between host and device during the running enumeration (notably, found solution points are passed to the host)
+
 The other files are either test files or wrap primitives in a way that allows the CPU-only mode, i.e. testing most of the code on a system that has no GPU.
 
 # CUDA Enumeration Idea

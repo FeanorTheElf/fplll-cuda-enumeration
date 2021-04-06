@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     container: nvidia/cuda:11.2.2-devel-ubuntu20.04
     steps:
+    - uses: actions/checkout@v2
+    - name: list
+      run: ls /github/home
     - name: list
       run: ls /github/home
     - name: list 2

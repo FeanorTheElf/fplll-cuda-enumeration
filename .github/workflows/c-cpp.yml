@@ -7,9 +7,11 @@ on:
     branches: [ FeanorTheElf-CI ]
 
 jobs:
-  test_no_gpu:
+  test:
     runs-on: ubuntu-latest
     container: nvidia/cuda:11.2.2-devel-ubuntu20.04
     steps:
-    - name: build_and_test
+    - name: list
+      run: ls .
+    - name: Build and Test
       run: make cputest

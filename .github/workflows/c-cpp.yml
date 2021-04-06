@@ -12,6 +12,6 @@ jobs:
     container: nvidia/cuda:11.2.2-devel-ubuntu20.04
     steps:
     - name: list
-      run: ls /github/workspace
+      run: ls /github
     - name: Build and Test
       run: make cputest

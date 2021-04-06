@@ -39,7 +39,8 @@ The other files are either test files or wrap primitives in a way that allows th
 
 # CUDA Enumeration Idea
 
-In this part, we describe how the enumeration algorithm is parallelized on Cuda Blocks and Threads. For detailed information, see the soon-to-be published report.
+In this part, we describe how the enumeration algorithm is parallelized on Cuda Blocks and Threads. 
+For detailed information, see [the report](https://eprint.iacr.org/2021/430).
 
 ## CUDA Blocks vs Warps vs Threads 
 

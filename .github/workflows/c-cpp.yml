@@ -1,4 +1,4 @@
-name: C/C++ CI
+name: Basic no-GPU Test
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
     branches: [ FeanorTheElf-CI ]
 
 jobs:
-  build:
+  test_no_gpu:
     runs-on: ubuntu-latest
+    container: nvidia/cuda:11.2.2-devel-ubuntu20.04
     steps:
-    - uses: actions/checkout@v2
-    - name: make
+    - name: build_and_test
       run: make cputest

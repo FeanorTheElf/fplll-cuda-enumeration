@@ -12,6 +12,9 @@ jobs:
     container: nvidia/cuda:11.2.2-devel-ubuntu20.04
     steps:
     - uses: actions/checkout@v2
+    - uses: actions/setup-python@v2
+      with:
+        python-version: '2.x'
     - name: Configure
       run: ./configure CUDA_CFLAGS="-D TEST_CPU_ONLY" CFLAGS="-D TEST_CPU_ONLY"
     - name: Build

@@ -11,10 +11,10 @@ cudaenum_test
 /Makefile.in
 /aclocal.m4
 /autom4te.cache/
-/config.*
+/config.log
+/config.status
 /depcomp
 /compile
-/install-sh
 /libtool
 /ltmain.sh
 /m4/

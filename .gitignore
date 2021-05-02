@@ -27,7 +27,7 @@ cudaenum_test
 *.l[ao]
 *~
 
-/autom4te.cache
+autom4te.cache
 
 # windows output files
 x64

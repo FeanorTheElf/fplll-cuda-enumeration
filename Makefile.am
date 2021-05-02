@@ -1,11 +1,18 @@
+AM_CUDA_CFLAGS = --std=c++11
+AM_CUDA_LIBS = -lcudart
+
 lib_LTLIBRARIES = libcudaenum.la
 libcudaenum_la_SOURCES = src/cuda_wrapper.cu
+libcudaenum_la_LIBADD = $(AM_CUDA_LIBS)
 
-LINK = $(LIBTOOL) --mode=link $(CC) -o $@ $(CUDA_LDFLAGS) $(CUDA_LIBS)
-NVCC_FLAGS = -D NDEBUG --std=c++11
+bin_PROGRAMS = cudaenum_test
+cudaenum_test_SOURCES = src/test.cpp src/testdata.cpp
+cudaenum_test_LDADD = libcudaenum.la
+
+LINK = $(LIBTOOL) --mode=link $(CC) -o $@ $(CUDA_LIBS)
 
 .cu.o:
-	$(NVCC) $(NVCC_FLAGS) -o $@ -c $<
+	$(NVCC) $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) -o $@ -c $<
 
 .cu.lo: 
-	$(top_srcdir)/cudalt.py "$(LIBTOOL)" $@ "$(NVCC)" $(NVCC_FLAGS) --compiler-options="$(CFLAGS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS)" -c $<
+	$(top_srcdir)/cudalt.py "$(LIBTOOL)" $@ "$(NVCC)" $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) --compiler-options="$(CFLAGS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS)" -c $<

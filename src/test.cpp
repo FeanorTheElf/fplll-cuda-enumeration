@@ -189,6 +189,9 @@ void test_perf() {
 int main()
 {
   try {
+#ifdef TEST_CPU_ONLY
+      std::cout << "Testing on CPU only..." << std::endl;
+#endif
       test_small();
       std::cout << "test_small() successful!" << std::endl << std::endl;
       test_knapsack();

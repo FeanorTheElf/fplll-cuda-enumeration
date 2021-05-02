@@ -14,7 +14,7 @@ AC_ARG_VAR(CUDA_CFLAGS,
     AS_HELP_STRING([Contains additional flags to pass to the cuda compiler])
 )
 
-AC_ARG_VAR(CUDA_LDLAGS, 
+AC_ARG_VAR(CUDA_LDFLAGS, 
     AS_HELP_STRING([Contains additional flags to pass to the linker when linking cuda libraries])
 )
 

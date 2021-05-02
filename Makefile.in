@@ -135,7 +135,8 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(bindir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-libcudaenum_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
+libcudaenum_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_libcudaenum_la_OBJECTS = src/cuda_wrapper.lo
 libcudaenum_la_OBJECTS = $(am_libcudaenum_la_OBJECTS)
@@ -242,7 +243,7 @@ CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CUDA_CFLAGS = @CUDA_CFLAGS@
-CUDA_LDLAGS = @CUDA_LDLAGS@
+CUDA_LDFLAGS = @CUDA_LDFLAGS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -359,7 +360,7 @@ libcudaenum_la_SOURCES = src/cuda_wrapper.cu
 libcudaenum_la_LIBADD = $(CUDA_LDFLAGS) $(AM_CUDA_LIBS)
 cudaenum_test_SOURCES = src/test.cpp src/testdata.cpp
 cudaenum_test_LDADD = libcudaenum.la
-LINK = $(LIBTOOL) --mode=link $(CC) -o $@ $(CUDA_LIBS)
+LINK = $(LIBTOOL) --mode=link $(CC) -o $@
 all: all-am
 
 .SUFFIXES:

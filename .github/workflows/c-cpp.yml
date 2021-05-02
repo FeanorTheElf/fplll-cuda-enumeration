@@ -12,5 +12,9 @@ jobs:
     container: nvidia/cuda:11.2.2-devel-ubuntu20.04
     steps:
     - uses: actions/checkout@v2
-    - name: Build and Test
-      run: make cputest
+    - name: Configure
+      run: ./configure CUDA_CFLAGS="-D TEST_CPU_ONLY" CFLAGS="-D TEST_CPU_ONLY"
+    - name: Build
+      run: make cudaenum_test
+    - name: Test
+      run: ./cudaenum_test

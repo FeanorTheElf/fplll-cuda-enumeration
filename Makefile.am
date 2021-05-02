@@ -15,4 +15,4 @@ LINK = $(LIBTOOL) --mode=link $(CC) -o $@ $(CUDA_LIBS)
 	$(NVCC) $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) -o $@ -c $<
 
 .cu.lo: 
-	$(top_srcdir)/cudalt.py "$(LIBTOOL)" $@ "$(NVCC)" $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) --compiler-options="$(CFLAGS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS)" -c $<
+	python $(top_srcdir)/cudalt.py "$(LIBTOOL)" $@ "$(NVCC)" $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) --compiler-options="$(CFLAGS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS)" -c $<

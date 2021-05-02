@@ -908,7 +908,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES
 	$(NVCC) $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) -o $@ -c $<
 
 .cu.lo: 
-	$(top_srcdir)/cudalt.py "$(LIBTOOL)" $@ "$(NVCC)" $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) --compiler-options="$(CFLAGS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS)" -c $<
+	python $(top_srcdir)/cudalt.py "$(LIBTOOL)" $@ "$(NVCC)" $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) --compiler-options="$(CFLAGS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS)" -c $<
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

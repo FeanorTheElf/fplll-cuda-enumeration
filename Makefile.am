@@ -11,6 +11,8 @@ bin_PROGRAMS = cudaenum_test
 cudaenum_test_SOURCES = src/test.cpp src/testdata.cpp
 cudaenum_test_LDADD = libcudaenum.la
 
+LINK = $(LIBTOOL) --mode=link $(CC) -o $@
+
 .cu.o:
 	$(NVCC) $(CUDA_CXXFLAGS) $(AM_CUDA_CXXFLAGS) -o $@ -c $<
 

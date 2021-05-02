@@ -632,6 +632,7 @@ ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 LIBOBJS
+CUDA_LDLAGS
 CUDA_CFLAGS
 NVCC
 CXXCPP
@@ -784,7 +785,8 @@ CXXFLAGS
 CCC
 CXXCPP
 NVCC
-CUDA_CFLAGS'
+CUDA_CFLAGS
+CUDA_LDLAGS'
 
 
 # Initialize some variables set by options.
@@ -1454,6 +1456,8 @@ Some influential environment variables:
   CXXCPP      C++ preprocessor
   NVCC        Overrides the location of the cuda compiler
   CUDA_CFLAGS Contains additional flags to pass to the cuda compiler
+  CUDA_LDLAGS Contains additional flags to pass to the linker when linking
+              cuda libraries
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -15721,6 +15725,8 @@ ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+
 
 
 

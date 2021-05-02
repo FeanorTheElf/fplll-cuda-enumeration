@@ -3,7 +3,7 @@ AM_CUDA_LIBS = -lcudart
 
 lib_LTLIBRARIES = libcudaenum.la
 libcudaenum_la_SOURCES = src/cuda_wrapper.cu
-libcudaenum_la_LIBADD = $(AM_CUDA_LIBS)
+libcudaenum_la_LIBADD = $(CUDA_LDFLAGS) $(AM_CUDA_LIBS)
 
 bin_PROGRAMS = cudaenum_test
 cudaenum_test_SOURCES = src/test.cpp src/testdata.cpp

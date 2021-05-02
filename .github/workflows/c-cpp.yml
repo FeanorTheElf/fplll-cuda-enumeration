@@ -16,7 +16,7 @@ jobs:
       with:
         python-version: '2.x'
     - name: Configure
-      run: ./configure CUDA_CFLAGS="-D TEST_CPU_ONLY" CFLAGS="-D TEST_CPU_ONLY" CUDA_LDFLAGS="-L/usr/local/cuda/lib64"
+      run: ./configure CUDA_CFLAGS="-D TEST_CPU_ONLY" CFLAGS="-D TEST_CPU_ONLY" CUDA_LDFLAGS="-L$LIBRARY_PATH"
     - name: Build
       run: make cudaenum_test
     - name: Test

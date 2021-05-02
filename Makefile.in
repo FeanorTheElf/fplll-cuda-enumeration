@@ -363,6 +363,7 @@ libcudaenum_la_SOURCES = src/cuda_wrapper.cu
 libcudaenum_la_LIBADD = $(CUDA_LDFLAGS) $(AM_CUDA_LIBS)
 cudaenum_test_SOURCES = src/test.cpp src/testdata.cpp
 cudaenum_test_LDADD = libcudaenum.la
+LINK = $(LIBTOOL) --mode=link $(CC) -o $@
 all: all-am
 
 .SUFFIXES:

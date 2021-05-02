@@ -8,17 +8,9 @@ cudaenum_test
 
 # autotools
 /Makefile
-/Makefile.in
-/aclocal.m4
 /autom4te.cache/
 /config.log
 /config.status
-/depcomp
-/compile
-/libtool
-/ltmain.sh
-/m4/
-/missing
 /stamp-h?
 .deps/
 .dirstamp

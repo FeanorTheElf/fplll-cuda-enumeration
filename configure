@@ -633,7 +633,7 @@ am__EXEEXT_TRUE
 LTLIBOBJS
 LIBOBJS
 CUDA_LDFLAGS
-CUDA_CFLAGS
+CUDA_CXXFLAGS
 NVCC
 CXXCPP
 am__fastdepCXX_FALSE
@@ -785,7 +785,7 @@ CXXFLAGS
 CCC
 CXXCPP
 NVCC
-CUDA_CFLAGS
+CUDA_CXXFLAGS
 CUDA_LDFLAGS'
 
 
@@ -1455,7 +1455,8 @@ Some influential environment variables:
   CXXFLAGS    C++ compiler flags
   CXXCPP      C++ preprocessor
   NVCC        Overrides the location of the cuda compiler
-  CUDA_CFLAGS Contains additional flags to pass to the cuda compiler
+  CUDA_CXXFLAGS
+              Contains additional flags to pass to the cuda compiler
   CUDA_LDFLAGS
               Contains additional flags to pass to the linker when linking
               cuda libraries

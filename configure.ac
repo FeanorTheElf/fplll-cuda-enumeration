@@ -10,7 +10,7 @@ AC_ARG_VAR(NVCC,
     AS_HELP_STRING([Overrides the location of the cuda compiler])
 )
 
-AC_ARG_VAR(CUDA_CFLAGS, 
+AC_ARG_VAR(CUDA_CXXFLAGS, 
     AS_HELP_STRING([Contains additional flags to pass to the cuda compiler])
 )
 

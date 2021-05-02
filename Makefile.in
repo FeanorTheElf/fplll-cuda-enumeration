@@ -242,7 +242,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
-CUDA_CFLAGS = @CUDA_CFLAGS@
+CUDA_CXXFLAGS = @CUDA_CXXFLAGS@
 CUDA_LDFLAGS = @CUDA_LDFLAGS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
@@ -356,14 +356,13 @@ top_srcdir = @top_srcdir@
 
 # these are custom variables, but are named similar to the corresponding automake
 # variables, as they similarly contain user-provided resp. configured flags to the compiler
-AM_CUDA_CFLAGS = --std=c++11
+AM_CUDA_CXXFLAGS = --std=c++11
 AM_CUDA_LIBS = -lcudart
 lib_LTLIBRARIES = libcudaenum.la
 libcudaenum_la_SOURCES = src/cuda_wrapper.cu
 libcudaenum_la_LIBADD = $(CUDA_LDFLAGS) $(AM_CUDA_LIBS)
 cudaenum_test_SOURCES = src/test.cpp src/testdata.cpp
 cudaenum_test_LDADD = libcudaenum.la
-LINK = $(LIBTOOL) --mode=link $(CC) -o $@
 all: all-am
 
 .SUFFIXES:
@@ -910,10 +909,10 @@ uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES
 
 
 .cu.o:
-	$(NVCC) $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) -o $@ -c $<
+	$(NVCC) $(CUDA_CXXFLAGS) $(AM_CUDA_CXXFLAGS) -o $@ -c $<
 
 .cu.lo: 
-	python $(top_srcdir)/cudalt.py "$(LIBTOOL)" $@ "$(NVCC)" $(CUDA_CFLAGS) $(AM_CUDA_CFLAGS) --compiler-options="$(CFLAGS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS)" -c $<
+	python $(top_srcdir)/cudalt.py "$(LIBTOOL)" $@ "$(NVCC)" $(CUDA_CXXFLAGS) $(AM_CUDA_CXXFLAGS) --compiler-options="$(CXXFLAGS) $(AM_CXXFLAGS) $(DEFAULT_INCLUDES) $(INCLUDES) $(CPPFLAGS) $(AM_CPPFLAGS)" -c $<
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

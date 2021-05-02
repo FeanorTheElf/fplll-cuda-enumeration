@@ -27,6 +27,12 @@ npic_filepath = npic_dir + o_filename
 local_pic_filepath = local_pic_dir + o_filename
 local_npic_filepath = local_npic_dir + o_filename
 
+def quote(s):
+   if " " in s:
+      return "\"" + s + "\""
+   else:
+      return s
+
 # Make lib dir
 try:
    os.mkdir(pic_dir)
@@ -38,7 +44,7 @@ args = other_args[:]
 args.extend(["-Xcompiler","-fPIC"]) # position indep code
 args.append("-o")
 args.append(pic_filepath)
-command = " ".join(args)
+command = " ".join(quote(a) for a in args)
 print "[cudaalt.py] " + command
 
 # compile the .cu
@@ -50,8 +56,8 @@ if rv != 0:
 args = other_args[:]
 args.append("-o")
 args.append(npic_filepath)
-command = " ".join(args)
-print"[cudaalt.py] " + command
+command = " ".join(quote(a) for a in args)
+print "[cudaalt.py] " + command
 
 # compile the .cu
 rv = os.system(command)

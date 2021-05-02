@@ -4,27 +4,29 @@ This library contains code to perform a lattice enumeration (i.e. searching latt
 
 # Building
 
-On Linux, you can use the provided Makefile.
+On Linux, the project relies on the Autotools build system. Most of the platform independent generated Autotools-Files are committed to the repository, mainly to simplify the CI implementation. However, it also makes building very easy, and you will not require an installation of Autotools. For details, see the next section.
 
 On Windows, you can use the provided Visual Studio solution. However, note that you will not be able to use the generated binaries with fplll, as fplll only supports Linux binaries.
 
-## Details on the Makefile
+## Building using Autotools
 
-The Makefile provides the following goals:
+The generated Autotools files are already part of the repository, so you should be able to execute `./configure & make` to build the library (`libcudaenum.so`) and an executable (`cudaenum_test`) that will run basic test.
+For building, you will need the Cuda compiler (i.e. `nvcc`), a C++ compiler and Python 2 (the latter is used for a build script that makes nvcc work with libtools).
 
- - `make rls` builds an executable that, when run, executes the unit tests
- - `make lib` builds a library `libcudaenum.so` that can be linked to fplll or another application
- - `make cpudbg` builds an executable that can be executed on a system without GPU (however, cuda must be installed) and runs the tests that are possible in such a setting
- - `make dbg` builds the test executable without optimization and with debug symbols
- - `make perf` builds an executable that, when run, executes the unit test and a longer running test
- - `make dbglib` builds the library without optimization and with debug symbols
+When calling configure, you can pass further arguments to customize the build:
+ - you can specify the location of nvcc by passing `NVCC=<path/to/executable>`.
+ - you can pass additional flags to nvcc when compiling cuda by passing `CUDA_CXXFLAGS=...`.
+ - you can pass additional flags to the standard linker when linking to the cuda library by passing `CUDA_LDFLAGS=...`. You might do so to specify the directory where the cuda runtime is, e.g. by `CUDA_LDFLAGS="-L/usr/local/cuda/lib64"`.
+ - Most other autotools variables are also used, e.g. you can customize the C++ compiler by `CXX=path/to/executable` or pass flags to it by `CXXFLAGS=...`
 
-The compilers `nvcc` and `g++` will be found if available on PATH, and `nvcc` is additionally looked up at `/usr/local/cuda/bin/nvcc`. These settings can be overridden by the variables `NVCC` and `CXX` respectively. Note that compiling with other host compilers than `g++` is untested.
+For example, when making a production build, one should disable assertions in device code. The command would then be `./configure CUDA_CXXFLAGS="-D NDEBUG"` followed by `make`.
+
+If you are a developer, you might want to regenerate the Autotools files, which can be achieved by the standard `autoreconf`. Note that Autotools is required to do so.
 
 ## Linking with fplll
 
-After the library was build using `make lib`, it is possible to build fplll such that it uses its function for all enumerations. For that, configure the fplll build with `./configure --with-extenum-dir=<absolute_path_to_lib_directory> --with-extenum-lib=cudaenum --with-extenum-func=fplll_cuda_enum` (if you have not build fplll before, a `./autogen.sh` might be necessary). Then build fplll using `make`.
-
+After the library was build using `make` (or `make libcudaenum.la`), it is possible to build fplll such that it uses its function for all enumerations. For that, configure the fplll build with `./configure --with-extenum-dir=<absolute/path/to/library/folder> --with-extenum-lib=cudaenum --with-extenum-func=fplll_cuda_enum` (if you have not build fplll before, a `./autogen.sh` might be necessary). Then build fplll using `make`.
+Note that by default, libcudaenum will be built into `.libs`, so the first argument when configuring fplll will probably look like `--with-extenum-dir=/.../fplll-cuda-enumeration/.libs`.
 
 # Code organization
 

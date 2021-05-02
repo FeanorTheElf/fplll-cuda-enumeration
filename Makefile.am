@@ -11,6 +11,20 @@ bin_PROGRAMS = cudaenum_test
 cudaenum_test_SOURCES = src/test.cpp src/testdata.cpp
 cudaenum_test_LDADD = libcudaenum.la
 
+# libtools does not support nvcc. I have thought of the following workarounds
+# - do not use libtools
+# - use libtools and tell it to use nvcc as a C++ compiler
+# - use a custom libtool-like script
+#
+# The first idea seems to be not recommended, it might void some portability advantages
+# and it would also be inconsistent with fplll.
+# The second approach has an issue with PIC code generation, as nvcc does not accept the
+# PIC flags libtools might pass to it, but without those PIC flags, the libtool descriptor
+# (the *.lo file) is unusable.
+# Therefore, we settle for the last option, following a guide that can be found at
+# www.clusterchimps.org/autotools.php. This is mainly what the python file `cudalt.py`
+# is used for. This is triggered by the following rules:
+
 LINK = $(LIBTOOL) --mode=link $(CC) -o $@
 
 .cu.o:

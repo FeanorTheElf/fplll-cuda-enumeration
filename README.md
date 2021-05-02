@@ -4,7 +4,7 @@ This library contains code to perform a lattice enumeration (i.e. searching latt
 
 # Building
 
-On Linux, the project relies on the Autotools build system. Most of the platform independent generated Autotools-Files are committed to the repository, mainly to simplify the CI implementation. However, it also makes building very easy, and you will not require an installation of Autotools. For details, see the next section.
+On Linux, the project relies on the Autotools build system. Most of the platform independent generated Autotools-files are committed to the repository, mainly to simplify the CI implementation. However, it also makes building very easy, and you will not require an installation of Autotools. For details, see the next section.
 
 On Windows, you can use the provided Visual Studio solution. However, note that you will not be able to use the generated binaries with fplll, as fplll only supports Linux binaries.
 
@@ -14,10 +14,10 @@ The generated Autotools files are already part of the repository, so you should 
 For building, you will need the Cuda compiler (i.e. `nvcc`), a C++ compiler and Python 2 (the latter is used for a build script that makes nvcc work with libtools).
 
 When calling configure, you can pass further arguments to customize the build:
- - you can specify the location of nvcc by passing `NVCC=<path/to/executable>`.
+ - you can specify the location of nvcc by passing `NVCC=path/to/executable`.
  - you can pass additional flags to nvcc when compiling cuda by passing `CUDA_CXXFLAGS=...`.
  - you can pass additional flags to the standard linker when linking to the cuda library by passing `CUDA_LDFLAGS=...`. You might do so to specify the directory where the cuda runtime is, e.g. by `CUDA_LDFLAGS="-L/usr/local/cuda/lib64"`.
- - Most other autotools variables are also used, e.g. you can customize the C++ compiler by `CXX=path/to/executable` or pass flags to it by `CXXFLAGS=...`
+ - Most other autotools variables are also available, e.g. you can customize the C++ compiler by `CXX=path/to/executable` or pass flags to it by `CXXFLAGS=...`
 
 For example, when making a production build, one should disable assertions in device code. The command would then be `./configure CUDA_CXXFLAGS="-D NDEBUG"` followed by `make`.
 

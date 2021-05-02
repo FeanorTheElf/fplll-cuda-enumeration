@@ -1,2 +1,4 @@
-bin_PROGRAMS = helloworld
-helloworld_SOURCES = src/helloworld.cpp
+include $(topsrcdir)/cuda.mk
+
+lib_LTLIBRARIES = libcudaenum.la
+libtest_la_SOURCES = src/cuda_wrapper.cu

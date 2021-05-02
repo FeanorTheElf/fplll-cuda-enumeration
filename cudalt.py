@@ -1,4 +1,3 @@
-#!/usr/bin/python
 # libtoolish hack: compile a .cu file like libtool does
 # adapted from http://www.clusterchimps.org
 import sys

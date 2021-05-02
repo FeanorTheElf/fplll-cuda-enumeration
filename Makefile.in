@@ -353,6 +353,9 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+
+# these are custom variables, but are named similar to the corresponding automake
+# variables, as they similarly contain user-provided resp. configured flags to the compiler
 AM_CUDA_CFLAGS = --std=c++11
 AM_CUDA_LIBS = -lcudart
 lib_LTLIBRARIES = libcudaenum.la

@@ -1,3 +1,5 @@
+# these are custom variables, but are named similar to the corresponding automake
+# variables, as they similarly contain user-provided resp. configured flags to the compiler
 AM_CUDA_CFLAGS = --std=c++11
 AM_CUDA_LIBS = -lcudart
 

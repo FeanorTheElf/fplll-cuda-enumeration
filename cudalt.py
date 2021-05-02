@@ -1,10 +1,12 @@
 #!/usr/bin/python
 # libtoolish hack: compile a .cu file like libtool does
-# from http://www.clusterchimps.org
+# adapted from http://www.clusterchimps.org
 import sys
 import os
 
-lo_filepath = sys.argv[1]
+libtool_path = sys.argv[1]
+lo_filepath = sys.argv[2]
+other_args = sys.argv[3:]
 o_filepath = lo_filepath.replace(".lo", ".o")
 
 try:
@@ -33,12 +35,12 @@ except OSError:
    pass
 
 # generate the command to compile the .cu for shared library
-args = sys.argv[2:]
+args = other_args[:]
 args.extend(["-Xcompiler","-fPIC"]) # position indep code
 args.append("-o")
 args.append(pic_filepath)
 command = " ".join(args)
-print command
+print "[cudaalt.py] " + command
 
 # compile the .cu
 rv = os.system(command)
@@ -46,11 +48,11 @@ if rv != 0:
     sys.exit(1)
 
 # generate the command to compile the .cu for static library
-args = sys.argv[2:]
+args = other_args[:]
 args.append("-o")
 args.append(npic_filepath)
 command = " ".join(args)
-print command
+print"[cudaalt.py] " + command
 
 # compile the .cu
 rv = os.system(command)
@@ -58,12 +60,15 @@ if rv != 0:
     sys.exit(1)
 
 # get libtool version
-fd = os.popen("libtool --version")
+fd = os.popen(libtool_path + " --version")
 libtool_version = fd.readline()
-# this loop supresses the broken pipe errors
-# you get by not reading all the data
-for dog in fd.readlines():
-    noop = 1;
+
+def read_whole_stream(stream):
+   for _ in stream:
+      pass
+
+# suppress any broken pipe error by reading the whole stream
+read_whole_stream(fd)
 fd.close()
 
 # generate the .lo file

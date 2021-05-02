@@ -1,10 +1,20 @@
 AC_INIT([fplll-cuda-enum], [1.0.0])
 AM_MAINTAINER_MODE([enable])
-
+AC_CONFIG_MACRO_DIRS([m4])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 LT_INIT
 
 AC_LANG_CPLUSPLUS
 AC_PROG_CXX
+
+CUDA_CFLAGS="-I/usr/local/cuda/include"
+CUDA_LIBS="-lcudart"
+CUDA_LDFLAGS="-L/usr/local/cuda/lib$SUFFIX"
+NVCC="nvcc"
+
+AC_SUBST(CUDA_CFLAGS)
+AC_SUBST(CUDA_LIBS)
+AC_SUBST(CUDA_LDFLAGS)
+AC_SUBST(NVCC)
 
 AC_OUTPUT([Makefile])

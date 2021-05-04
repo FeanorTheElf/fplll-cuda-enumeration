@@ -1,11 +1,32 @@
+# general linux output files
 *.o
+*.lo
 a.out
 libcudaenum.so
+libcudaenum.a
 cudaenum_test
+
+# autotools
+/Makefile
+/autom4te.cache/
+/config.log
+/config.status
+/stamp-h?
+.deps/
+.dirstamp
+.libs/
+*.l[ao]
+*~
+
+autom4te.cache
+
+# windows output files
 x64
 *.vcxproj.user
 *.vcxproj.filters
 .vs
+
+# latex
 report/*.bbl
 report/*.bcf
 report/*.blg

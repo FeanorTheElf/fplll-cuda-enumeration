@@ -1,0 +1,23 @@
+name: Basic no-GPU Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: nvidia/cuda:11.2.2-devel-ubuntu20.04
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-python@v2
+      with:
+        python-version: '2.x'
+    - name: Configure
+      run: ./configure CUDA_CFLAGS="-D TEST_CPU_ONLY" CXXFLAGS="-D TEST_CPU_ONLY" CUDA_LDFLAGS="-L/usr/local/cuda/lib64"
+    - name: Build
+      run: make cudaenum_test
+    - name: Test
+      run: ./cudaenum_test

@@ -1,0 +1,9 @@
+configure linguist-generated
+libtool linguist-generated
+config.guess linguist-generated
+missing linguist-generated
+depcomp linguist-generated
+compile linguist-generated
+ltmain.sh linguist-generated
+install-sh linguist-generated
+config.sub linguist-generated

@@ -22,7 +22,6 @@
 
 #include "cuda_runtime.h"
 #include "types.cuh"
-#include "cooperative_groups.h"
 
 namespace cuenum
 {
@@ -199,14 +198,8 @@ CudaEnumeration<maxdim>::enumerate_recursive(Callback &callback, unsigned int &m
       return true;
     }
 
-#ifdef __CUDA_ARCH__
-    aggregated_atomic_inc(&perf[0]);
-    if (cooperative_groups::coalesced_threads().thread_rank() == 0) {
-        atomic_add(&perf[1], 32);
-    }
-#endif
-
     partdist[kk - 1] = newdist2;
+
     for (int j = 0; j < kk; ++j)
     {
       center_partsums[j][kk - 1] = center_partsums[j][kk] - x[kk] * mu.at(j, kk);

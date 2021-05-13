@@ -62,7 +62,7 @@ struct PerfCounter
   }
 };
 
-__device__ unsigned long long perf[2] = { 0 };
+__device__ unsigned long long perf[1] = { 0 };
 
 __device__ __host__ inline unsigned long long from() {
 #ifdef __CUDA_ARCH__
@@ -79,14 +79,14 @@ __device__ __host__ inline void to(unsigned long long x) {
 }
 
 __host__ inline void reset_profiling_counter() {
-    const unsigned long long zero[2] = { 0, 0 };
-    cudaMemcpyToSymbol(perf, &zero, 2 * sizeof(unsigned long long), 0, cudaMemcpyHostToDevice);
+    const unsigned long long zero = 0;
+    cudaMemcpyToSymbol(perf, &zero, sizeof(unsigned long long), 0, cudaMemcpyHostToDevice);
 }
 
 __host__ inline void print_profiling_counter() {
-    unsigned long long hperf[2];
-    cudaMemcpyFromSymbol(&hperf, perf, 2 * sizeof(unsigned long long), 0, cudaMemcpyDeviceToHost);
-    std::cout << "profiling counter " << (hperf[0] / 1e9) << " Gcycles, " << (hperf[1] / 1e9) << " Gcycles" << std::endl;
+    unsigned long long hperf;
+    cudaMemcpyFromSymbol(&hperf, perf, sizeof(unsigned long long), 0, cudaMemcpyDeviceToHost);
+    std::cout << "profiling counter " << (hperf / 1e9) << " Gcycles" << std::endl;
 }
 
 #define FROM(x) unsigned long long x = from();

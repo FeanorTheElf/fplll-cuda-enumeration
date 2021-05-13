@@ -21,7 +21,6 @@
 
 #include "cuda_runtime.h"
 #include "cooperative_groups.h"
-#include <limits>
 #include <assert.h>
 
 constexpr inline unsigned int int_log2_rec(unsigned int x) {

@@ -46,7 +46,6 @@ struct CudaEnumOpts
 };
 
 constexpr CudaEnumOpts default_opts = {50, .5, 3, 8, 32 * 256};
-extern CudaEnumOpts used_opts;
 
 std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
     const unsigned int enum_dimensions,

@@ -18,7 +18,6 @@
 #include <iostream>
 #include <memory>
 #include <ctime>
-#include <functional>
 #include "memory.h"
 
 __device__ __host__ inline unsigned int thread_id()

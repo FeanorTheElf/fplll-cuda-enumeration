@@ -207,7 +207,6 @@ namespace cuenum {
         return create_start_point_array(start_points.size(), start_dims, start_points.begin(), start_points.end());
     }
 
-    CudaEnumOpts used_opts = default_opts;
 }
 
 std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int dim, enumf maxdist, std::function<extenum_cb_set_config> cbfunc,
@@ -241,7 +240,7 @@ std::array<uint64_t, FPLLL_EXTENUM_MAX_EXTENUM_DIM> fplll_cuda_enum(const int di
         mu.get()[i * dim + i] = 1;
     }
 
-    cuenum::CudaEnumOpts opts = cuenum::used_opts;
+    cuenum::CudaEnumOpts opts = cuenum::default_opts;
 
 #ifdef TEST_CPU_ONLY
     opts.initial_nodes_per_group = 1;

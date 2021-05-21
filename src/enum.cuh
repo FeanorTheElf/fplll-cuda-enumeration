@@ -1194,7 +1194,7 @@
            CudaPtr<enumf> pruning_bounds = cuda_alloc(enumf, mu_n);
            CudaPtr<enumf> device_mu = cuda_alloc(enumf, mu_n * mu_n);
            CudaPtr<enumf> device_rdiag = cuda_alloc(enumf, mu_n);
-           CudaPtr<uint64_t> node_counter = cuda_alloc(uint64_t, tree_dimensions);
+           CudaPtr<uint64_t> node_counter = cuda_alloc(uint64_t, mu_n);
            CudaPtr<enumi> device_start_points = cuda_alloc(enumi, start_point_count * start_point_dim);
            CudaPtr<unsigned int> processed_start_point_count = cuda_alloc(unsigned int, 1);
    
@@ -1203,7 +1203,7 @@
            check(cudaMemcpy(device_start_points.get(), start_points,
                start_point_dim * start_point_count * sizeof(enumi), cudaMemcpyHostToDevice));
    
-           PointStream stream(point_stream_memory.get(), pruning_bounds.get(), pruning, initial_radius * initial_radius, grid_size, mu_n);
+           PointStream stream(point_stream_memory.get(), pruning_bounds.get(), node_counter.get(), pruning, initial_radius * initial_radius, grid_size, mu_n);
            stream.init();
    
            cudaEvent_t raw_event;
@@ -1221,20 +1221,24 @@
                std::cout << "Enumerating " << (levels * dimensions_per_level)
                    << " dimensional lattice using cuda, started " << grid_size << " block with "
                    << enumerate_block_size << " threads each; Beginning with " << start_point_count << " start points" << std::endl;
-               std::cout << "Main Enumerator has size " << sizeof(TreeLevelEnumerator<levels, dimensions_per_level, max_nodes_per_level>) << std::endl;
            }
            std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
    
            enumerate_kernel << <dim3(grid_size), dim3(enumerate_block_size), 0, exec_stream.get() >> > (
                buffer_mem.get(), device_start_points.get(), processed_start_point_count.get(),
                start_point_count, start_point_dim, device_mu.get(), device_rdiag.get(), pruning_bounds.get(),
-               node_counter.get(), point_stream_memory.get(), opts);
+               node_counter.get() + start_point_dim, point_stream_memory.get(), opts);
    
            check(cudaEventRecord(event.get(), exec_stream.get()));
-   
+
+           std::chrono::steady_clock::time_point last_printed = std::chrono::steady_clock::now();
            while (cudaEventQuery(event.get()) != cudaSuccess)
            {
                stream.query_new_points<process_sol_fn, print_status>(process_sol);
+               if ((std::chrono::steady_clock::now() - last_printed) > std::chrono::seconds(1)) {
+                   stream.print_currently_searched_nodes();
+                   last_printed = std::chrono::steady_clock::now();
+               }
            }
            stream.wait_for_event(event.get());
            stream.query_new_points<process_sol_fn, print_status>(process_sol);
@@ -1243,7 +1247,7 @@
            check(cudaGetLastError());
    
            std::array<uint64_t, tree_dimensions> searched_nodes;
-           check(cudaMemcpy(&searched_nodes[0], node_counter.get(), tree_dimensions * sizeof(uint64_t),
+           check(cudaMemcpy(&searched_nodes[0], node_counter.get() + start_point_dim, tree_dimensions * sizeof(uint64_t),
                cudaMemcpyDeviceToHost));
    
            if (print_status)
@@ -1259,12 +1263,6 @@
                std::cout << "Searched " << std::accumulate(searched_nodes.begin(), searched_nodes.end(), static_cast<uint64_t>(0))
                    << " tree nodes, and decreased enumeration bound down to "
                    << sqrt(result_radius) << std::endl;
-
-               std::cout << "Nodes per enum tree level: ";
-               for (const auto& x : searched_nodes) {
-                   std::cout << x << ", ";
-               }
-               std::cout << std::endl;
            }
            print_profiling_counter();
    

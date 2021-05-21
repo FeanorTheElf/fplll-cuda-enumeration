@@ -94,6 +94,8 @@ class PointStreamEndpoint {
   enumf* device_enumeration_bounds;
   const enumf* relative_enumeration_bounds;
   enumf global_enumeration_radius_squared;
+  PinnedPtr<uint64_t> host_searched_nodes;
+  const uint64_t* device_searched_nodes;
   std::vector<std::unique_ptr<unsigned int[]>> last_has_written_round;
   CudaStream stream;
 
@@ -128,7 +130,7 @@ public:
    * @param relative_enumeration_bounds - memory on the host containing the n enumeration bounds relative to the global enumeration bound
    * @param initial_radius_squared - the initial global enumeration bound, this can be decreased whenever new points are found
    */
-  inline PointStreamEndpoint(unsigned char* device_memory, enumf* device_enumeration_bounds, const enumf* relative_enumeration_bounds, enumf initial_radius_squared, unsigned int evaluator_count, unsigned int point_dimension)
+  inline PointStreamEndpoint(unsigned char* device_memory, enumf* device_enumeration_bounds, const uint64_t* device_searched_nodes, const enumf* relative_enumeration_bounds, enumf initial_radius_squared, unsigned int evaluator_count, unsigned int point_dimension)
     : evaluator_count(evaluator_count),
       point_dimension(point_dimension),
       device_memory(device_memory),
@@ -136,7 +138,9 @@ public:
       host_enumeration_bounds(alloc_pinned_memory<enumf>(point_dimension)),
       device_enumeration_bounds(device_enumeration_bounds),
       relative_enumeration_bounds(relative_enumeration_bounds),
-      global_enumeration_radius_squared(initial_radius_squared)
+      global_enumeration_radius_squared(initial_radius_squared),
+      device_searched_nodes(device_searched_nodes),
+      host_searched_nodes(alloc_pinned_memory<uint64_t>(point_dimension))
     {
         const unsigned int used_device = 0;
         cudaDeviceProp deviceProp;
@@ -209,6 +213,13 @@ public:
             check(cudaStreamSynchronize(stream.get()));
         }
     } 
+
+    __host__ void print_currently_searched_nodes() {
+        check(cudaMemcpyAsync(host_searched_nodes.get(), device_searched_nodes, point_dimension * sizeof(uint64_t), cudaMemcpyDeviceToHost, stream.get()));
+        check(cudaStreamSynchronize(stream.get()));
+        std::cout << "Currently searched " << std::accumulate(host_searched_nodes.get(), host_searched_nodes.get() + point_dimension, static_cast<uint64_t>(0))
+            << " tree nodes" << std::endl;
+    }
 
     __host__ inline void wait_for_event(cudaEvent_t event) {
         check(cudaStreamWaitEvent(stream.get(), event, 0));

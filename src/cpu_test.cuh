@@ -8,15 +8,14 @@ namespace cuenum {
         process_sol_fn process_sol,
         Opts<levels, dimensions_per_level, max_nodes_per_level> opts)
     {
-        typedef single_thread CG;
+        typedef ThreadGroupSingleThread SyncGroup;
         typedef SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> SubtreeBuffer;
 
         constexpr unsigned int block_size = 1;
         constexpr unsigned int dimensions = dimensions_per_level * levels;
         const unsigned int point_dimension = dimensions + start_point_dim;
 
-        CG group;
-        PrefixCounter<CG, block_size> prefix_counter;
+        SyncGroup group;
         unsigned int counter = 0;
         unsigned int processed_start_point_counter = 0;
         uint64_t perf_counter[dimensions] = {};
@@ -100,7 +99,7 @@ namespace cuenum {
 
             group.sync();
 
-            clear_level(group, prefix_counter, &counter, buffer, 0, mu, rdiag,
+            clear_level(group, &counter, buffer, 0, mu, rdiag,
                 pruning_bounds.get(), evaluator, start_points, start_point_dim,
                 opts.tree_clear_opts, node_counter);
         }

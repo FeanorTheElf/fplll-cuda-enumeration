@@ -23,7 +23,7 @@
     <ClInclude Include="src\cuda_wrapper.h" />
     <ClInclude Include="src\enum.cuh" />
     <ClInclude Include="src\memory.h" />
-    <ClInclude Include="src\prefix.cuh" />
+    <ClInclude Include="src\group.cuh" />
     <ClInclude Include="src\recenum.cuh" />
     <ClInclude Include="src\streaming.cuh" />
     <ClInclude Include="src\testdata.h" />

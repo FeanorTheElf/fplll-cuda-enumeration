@@ -33,7 +33,7 @@
    #include "constants.cuh"
    #include "atomic.h"
    #include "cuda_util.cuh"
-   #include "prefix.cuh"
+   #include "group.cuh"
    #include "streaming.cuh"
    #include "recenum.cuh"
    
@@ -373,23 +373,22 @@
             * call this function for the last active_thread_count nodes in the tree. Calls with
             * cooperative_group.thread_rank() >= active_thread_count will be ignored.
             */
-           template <typename CG, unsigned int block_size>
+           template <typename SyncGroup>
            __device__ __host__ inline void
-               filter_nodes(CG& cooperative_group, PrefixCounter<CG, block_size>& prefix_counter,
+               filter_nodes(SyncGroup& group,
                    unsigned int tree_level, unsigned int old_index, bool keep_this_thread_task,
                    unsigned int active_thread_count)
            {
                assert(tree_level < levels);
                assert(active_thread_count <= open_node_count()[tree_level]);
                assert(old_index ==
-                   open_node_count()[tree_level] - active_thread_count + cooperative_group.thread_rank());
+                   open_node_count()[tree_level] - active_thread_count + group.thread_rank());
                assert(tree_level + 1 == levels || open_node_count()[tree_level + 1] == 0);
    
                unsigned int kept_tasks = 0;
                const bool is_active =
-                   keep_this_thread_task && cooperative_group.thread_rank() < active_thread_count;
-               const unsigned int new_offset =
-                   prefix_counter.prefix_count(cooperative_group, is_active, kept_tasks);
+                   keep_this_thread_task && group.thread_rank() < active_thread_count;
+               const unsigned int new_offset = group.prefix_count(is_active, kept_tasks);
                const unsigned int new_index = new_offset + open_node_count()[tree_level] - active_thread_count;
    
                enumi coefficients_tmp[dimensions_per_level];
@@ -413,7 +412,7 @@
                    }
                }
    
-               cooperative_group.sync();
+               group.sync();
    
                if (is_active)
                {
@@ -431,7 +430,7 @@
                    }
                }
    
-               if (cooperative_group.thread_rank() == 0)
+               if (group.thread_rank() == 0)
                {
                    open_node_count()[tree_level] -= active_thread_count - kept_tasks;
                }
@@ -530,6 +529,13 @@
            assert(!isnan(center_partsum));
            return center_partsum;
        }
+
+       template <unsigned int levels, unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
+       struct TreeLevelEnumerator {
+
+
+
+       };
    
        /**
         * Initializes newly generated nodes with all information necessary to perform subtree enumeration,
@@ -626,10 +632,10 @@
        /**
        * 
        */
-       template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
+       template <typename SyncGroup, unsigned int levels, unsigned int dimensions_per_level,
            unsigned int max_nodes_per_level>
        __device__ __host__ void ensure_enumeration_initialized(
-           CG& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
+           SyncGroup& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
            int level, int target_level, Matrix mu, const enumf* rdiag, int index
        ) {
            unsigned int current_level = level;
@@ -688,7 +694,7 @@
 
                for (unsigned int i = 0; i < dimensions_per_level; ++i) {
 
-                   const enumf parent_center_partsum = group.shfl(partsums[i], lane_id_of_parent);
+                   const enumf parent_center_partsum = group.shuffle(partsums[i], lane_id_of_parent);
                    assert(!isnan(parent_center_partsum)); 
 
                    if (group.thread_rank() < active_thread_count) {
@@ -849,10 +855,10 @@
         * referencing such a done node as a parent node, since the enumeration data is updated when
         * children are generated, not when children are fully processed.
         */
-       template <typename CG, unsigned int block_size, unsigned int levels,
+       template <typename SyncGroup, unsigned int levels,
            unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
            __device__ __host__ inline void remove_done_nodes(
-               CG& group, PrefixCounter<CG, block_size>& prefix_counter,
+               SyncGroup& group,
                SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
                Matrix mu, const enumf* rdiag, const enumf* pruning_bounds)
        {
@@ -869,7 +875,7 @@
    
            group.sync();
    
-           buffer.filter_nodes(group, prefix_counter, level, index, !is_done, active_thread_count);
+           buffer.filter_nodes(group, level, index, !is_done, active_thread_count);
        }
    
        struct StrategyOpts
@@ -886,10 +892,10 @@
         * Generates children from the last group.size() nodes on level and adds them to the buffer, until
         * either the children buffer is full or most of these nodes are done.
         */
-       template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
+       template <typename SyncGroup, unsigned int levels, unsigned int dimensions_per_level,
            unsigned int max_nodes_per_level>
            __device__ __host__ inline void process_inner_level(
-               CG& group, unsigned int* shared_counter,
+               SyncGroup& group, unsigned int* shared_counter,
                SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
                Matrix mu, const enumf* rdiag, const enumf* pruning_bounds, PerfCounter counter,
                StrategyOpts opts)
@@ -925,10 +931,10 @@
            }
        }
    
-       template <typename CG, unsigned int block_size, typename eval_sol_fn, unsigned int levels,
+       template <typename SyncGroup, typename eval_sol_fn, unsigned int levels,
            unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
            __device__ __host__ inline void process_leaf_level(
-               CG& group, PrefixCounter<CG, block_size>& prefix_counter,
+               SyncGroup& group,
                SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, Matrix mu,
                const enumf* rdiag, const enumf* pruning_bounds, PerfCounter node_counter,
                eval_sol_fn& process_sol, const enumi* start_points, unsigned int start_point_dim,
@@ -939,7 +945,7 @@
            {
                consume_leaves(group, buffer, mu, rdiag, pruning_bounds, opts.max_subtree_paths,
                    process_sol, start_points, start_point_dim, node_counter);
-               remove_done_nodes(group, prefix_counter, buffer, level, mu, rdiag, pruning_bounds);
+               remove_done_nodes(group, buffer, level, mu, rdiag, pruning_bounds);
                group.sync();
            }
        }
@@ -948,18 +954,17 @@
         * Removes finished nodes from the parent level of the given level. Does nothing when called on the
         * root.
         */
-       template <typename CG, unsigned int block_size, unsigned int levels,
-           unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
+       template <typename SyncGroup, typename SubtreeBuffer>
            __device__ __host__ inline void cleanup_parent_level(
-               CG& group, PrefixCounter<CG, block_size>& prefix_counter,
-               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
+               SyncGroup& group,
+               SubtreeBuffer buffer, int level,
                Matrix mu, const enumf* rdiag, const enumf* pruning_bounds)
        {
            if (level > 0)
            {
                group.sync();
    
-               remove_done_nodes(group, prefix_counter, buffer, level - 1, mu, rdiag, pruning_bounds);
+               remove_done_nodes(group, buffer, level - 1, mu, rdiag, pruning_bounds);
    
                group.sync();
    
@@ -972,10 +977,10 @@
            }
        }
    
-       template <typename CG, unsigned int block_size, typename eval_sol_fn, unsigned int levels,
+       template <typename SyncGroup, unsigned int block_size, typename eval_sol_fn, unsigned int levels,
            unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
            __device__ __host__ inline void
-           clear_level(CG& group, PrefixCounter<CG, block_size>& prefix_counter, unsigned int* shared_counter,
+           clear_level(SyncGroup& group, unsigned int* shared_counter,
                SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
                int level, Matrix mu, const enumf* rdiag, const enumf* pruning_bounds,
                eval_sol_fn& process_sol, const enumi* start_points, unsigned int start_point_dim,
@@ -993,16 +998,16 @@
                    }
                    else
                    {
-                       cleanup_parent_level(group, prefix_counter, buffer, level, mu, rdiag,
+                       cleanup_parent_level(group, buffer, level, mu, rdiag,
                            pruning_bounds);
                        --level;
                    }
                }
                else
                {
-                   process_leaf_level(group, prefix_counter, buffer, mu, rdiag, pruning_bounds,
+                   process_leaf_level(group, buffer, mu, rdiag, pruning_bounds,
                        node_counter, process_sol, start_points, start_point_dim, opts);
-                   cleanup_parent_level(group, prefix_counter, buffer, level, mu, rdiag, pruning_bounds);
+                   cleanup_parent_level(group, buffer, level, mu, rdiag, pruning_bounds);
                    --level;
                }
                group.sync();
@@ -1037,7 +1042,7 @@
                unsigned char* point_stream_memory,
                Opts<levels, dimensions_per_level, max_nodes_per_level> opts)
        {
-           typedef cooperative_groups::thread_block_tile<32, cooperative_groups::thread_block> CG;
+           typedef ThreadGroupWarp<enumerate_block_size> SyncGroup;
            typedef SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> SubtreeBuffer;
            typedef PointStreamEvaluator<enumerate_point_stream_buffer_size> Evaluator;
    
@@ -1053,21 +1058,17 @@
    
            __shared__ unsigned char shared_mem[shared_mem_size];
    
-           CG group = cooperative_groups::tiled_partition<32, cooperative_groups::thread_block>(cooperative_groups::this_thread_block());
-           const unsigned int group_id = thread_id() / enumerate_cooperative_group_size;
-           const unsigned int group_id_in_block = thread_id_in_block() / enumerate_cooperative_group_size;
+           SyncGroup group = SyncGroup(cooperative_groups::this_thread_block());
            assert(group.size() == enumerate_cooperative_group_size);
-   
-           PrefixCounter<CG, block_size> prefix_counter;
    
            enumf* mu_shared = reinterpret_cast<enumf*>(shared_mem);
            enumf* rdiag_shared = reinterpret_cast<enumf*>(shared_mem + mu_shared_memory_size);
    
            unsigned int* group_shared_counter =
-               reinterpret_cast<unsigned int*>(shared_mem + group_id_in_block * sizeof(unsigned int) +
+               reinterpret_cast<unsigned int*>(shared_mem + group.group_index_in_block() * sizeof(unsigned int) +
                    mu_shared_memory_size + rdiag_shared_memory_size);
            unsigned int* point_stream_counter =
-               reinterpret_cast<unsigned int*>(shared_mem + group_count_per_block * sizeof(unsigned int) +
+               reinterpret_cast<unsigned int*>(shared_mem + group.group_index_in_block() * sizeof(unsigned int) +
                    mu_shared_memory_size + rdiag_shared_memory_size);
    
            const unsigned int ldmu = dimensions + start_point_dim;
@@ -1088,7 +1089,7 @@
    
            assert(opts.initial_nodes_per_group <= group.size());
    
-           SubtreeBuffer buffer(buffer_memory + group_id * SubtreeBuffer::memory_size_in_bytes);
+           SubtreeBuffer buffer(buffer_memory + group.group_index() * SubtreeBuffer::memory_size_in_bytes);
    
            while (true)
            {
@@ -1144,9 +1145,11 @@
    
                group.sync();
    
-               clear_level(group, prefix_counter, group_shared_counter, buffer, 0, mu, rdiag_shared,
+               clear_level<SyncGroup, block_size, Evaluator, levels, dimensions_per_level, max_nodes_per_level>(
+                   group, group_shared_counter, buffer, 0, mu, rdiag_shared,
                    pruning_bounds, process_sol, start_points, start_point_dim,
-                   opts.tree_clear_opts, node_counter);
+                   opts.tree_clear_opts, node_counter
+               );
            }
        }
    

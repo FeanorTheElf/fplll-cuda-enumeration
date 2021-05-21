@@ -92,4 +92,13 @@ __host__ inline void print_profiling_counter() {
 #define FROM(x) unsigned long long x = from();
 #define TO(x) to(x);
 
+__device__ __host__ inline void profile_active_thread_percentage() {
+#ifdef __CUDA_ARCH__
+    aggregated_atomic_inc(&perf[0]);
+    if (cooperative_groups::coalesced_threads().thread_rank() == 0) {
+        atomic_add(&perf[1], 32);
+    }
+#endif
+}
+
 #endif

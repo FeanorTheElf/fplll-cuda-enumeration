@@ -187,13 +187,13 @@ void test_perf() {
 }
 
 void test_perf_pruning() {
-    constexpr unsigned int total_dim = 60;
-    const std::array<std::array<float, total_dim>, total_dim>& lattice = test_lattice_pruning;
-    std::array<float, total_dim> used_pruning = { 
-        1, 1, 1, 0.999977, 0.999977, 0.999977, 0.999977, 0.999977, 0.999977, 0.999977, 0.999977, 0.999977, 0.991056, 0.974429, 0.957803, 0.933117, 0.901661, 0.873127, 0.838751, 0.813213, 0.782613, 0.759447, 0.731946, 0.710416, 0.685222, 0.664883, 0.641506, 0.622161, 0.600395, 0.582066, 0.561757, 0.544338, 0.525404, 0.508821, 0.490564, 0.473741, 0.457732, 0.444122, 0.434084, 0.419095, 0.405549, 0.395624, 0.382387, 0.370989, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742, 0.363742
+    constexpr unsigned int total_dim = 55;
+    const std::array<std::array<float, total_dim>, total_dim>& lattice = test_lattice_pruning_medium;
+    std::array<float, total_dim> used_pruning = {
+        1, 1, 1, 1, 1, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.970155, 0.961623, 0.946518, 0.928738, 0.898447, 0.870335, 0.825749, 0.799674, 0.755535, 0.732304, 0.689657, 0.66909, 0.628557, 0.610775, 0.571269, 0.557907, 0.525234, 0.52288, 0.49782, 0.494721, 0.469562, 0.463059, 0.443322, 0.437454, 0.437454, 0.429153, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711, 0.391711
     };
 
-    double maxdist = 13650;
+    double maxdist = 15913;
     std::function<extenum_cb_set_config> set_config = [&lattice, &used_pruning](double* mu, size_t mudim, bool mutranspose, double* rdiag, double* pruning) {
         set_lattice_config(&lattice[0][0], &used_pruning[0], mu, mudim, mutranspose, rdiag, pruning);
     };
@@ -228,6 +228,6 @@ void run_tests() {
 
 int main()
 {
-    run_tests();
+    test_perf_pruning();
     return 0;
 }

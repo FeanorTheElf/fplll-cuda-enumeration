@@ -35,6 +35,8 @@ extern const std::array<std::array<float, 50>, 50> test_mu_knapsack_big;
 extern const std::array<std::array<float, 60>, 60> test_lattice_pruning;
 extern const std::array<std::array<float, 50>, 50> test_lattice_pruning_small;
 extern const std::array<std::array<float, 40>, 40> test_lattice_pruning_tiny;
+extern const std::array<std::array<float, 55>, 55> test_lattice_pruning_medium;
+
 /**
  * Up to orthogonal transform equal to test_mu_knapsack_big. This is the result of
  * the fplll preprocessing on test_mu_knapsack_big, so use this to compare performance.

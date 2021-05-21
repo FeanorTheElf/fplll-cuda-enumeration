@@ -728,6 +728,7 @@
            __device__ __host__ inline void process_inner_level(
                SyncGroup& group
            ) {
+               const unsigned begin_node_count = buffer.get_node_count(level + 1);
                const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
 
                while (true)
@@ -897,6 +898,7 @@
            bool is_initialized;
            bool all_initialized;
            // search for the lowest level which has the required partsums set
+
            do {
                const unsigned int node_count = buffer.get_node_count(current_level);
                const unsigned int active_thread_count = min(node_count, group.size());
@@ -952,7 +954,6 @@
                const unsigned int lane_id_of_parent = min(parent_node_count, group.size()) + parent_index - parent_node_count;
 
                for (unsigned int i = 0; i < dimensions_per_level; ++i) {
-
                    const enumf parent_center_partsum = group.shuffle(partsums[i], lane_id_of_parent);
                    assert(!isnan(parent_center_partsum));
 
@@ -1025,7 +1026,7 @@
         */
        template <unsigned int levels, unsigned int dimensions_per_level,
            unsigned int max_nodes_per_level>
-       __global__ void __launch_bounds__(enumerate_block_size, 2) enumerate_kernel(unsigned char* buffer_memory, const enumi* start_points,
+       __global__ void __launch_bounds__(enumerate_block_size, 4) enumerate_kernel(unsigned char* buffer_memory, const enumi* start_points,
            unsigned int* processed_start_point_counter, unsigned int start_point_count,
            unsigned int start_point_dim, const enumf* mu_ptr, const enumf* rdiag,
            const enumf* pruning_bounds, uint64_t* perf_counter_memory,
@@ -1258,6 +1259,12 @@
                std::cout << "Searched " << std::accumulate(searched_nodes.begin(), searched_nodes.end(), static_cast<uint64_t>(0))
                    << " tree nodes, and decreased enumeration bound down to "
                    << sqrt(result_radius) << std::endl;
+
+               std::cout << "Nodes per enum tree level: ";
+               for (const auto& x : searched_nodes) {
+                   std::cout << x << ", ";
+               }
+               std::cout << std::endl;
            }
            print_profiling_counter();
    

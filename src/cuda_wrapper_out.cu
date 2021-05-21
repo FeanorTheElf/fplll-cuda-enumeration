@@ -158,6 +158,8 @@ namespace cuenum {
             return wrapper.search_enumeration_choose_levels(int_marker<3>(), int_marker<18>(), int_marker<0>());
         else if (levels == 14)
             return wrapper.search_enumeration_choose_levels(int_marker<3>(), int_marker<14>(), int_marker<0>());
+        else if (levels == 16)
+            return wrapper.search_enumeration_choose_levels(int_marker<3>(), int_marker<16>(), int_marker<0>());
         else
             throw;
     }

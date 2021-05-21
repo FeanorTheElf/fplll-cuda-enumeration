@@ -116,6 +116,7 @@
       <GenerateLineInfo>true</GenerateLineInfo>
       <InterleaveSourceInPTX>true</InterleaveSourceInPTX>
       <GPUDebugInfo>false</GPUDebugInfo>
+      <PtxAsOptionV>true</PtxAsOptionV>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Performance|x64'">

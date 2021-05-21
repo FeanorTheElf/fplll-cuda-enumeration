@@ -734,6 +734,10 @@
            const unsigned int offset_kk = (levels - level - 1) * dimensions_per_level;
            unsigned int existing_nodes = buffer.get_node_count(level + 1);
    
+           ensure_enumeration_initialized(
+               group, buffer, level, level, mu, rdiag, index
+           );
+
            group.sync();
 
            if (active)
@@ -755,10 +759,7 @@
                    buffer.set_enumeration(level, index, enumeration);
                }
            }
-           
-           group.sync();
 
-           init_new_nodes(group, level + 1, existing_nodes, buffer, mu, counter);
        }
    
        /**
@@ -780,6 +781,9 @@
                buffer.get_node_count(level) - active_thread_count + group.thread_rank();
            const bool active = index < buffer.get_node_count(level);
 
+           ensure_enumeration_initialized(
+               group, buffer, level, level, mu, rdiag, index
+           );
 
            group.sync();
 

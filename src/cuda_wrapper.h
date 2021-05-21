@@ -24,7 +24,7 @@
 namespace cuenum
 {
 
-typedef std::function<float(double, double*)> process_sol_fn;
+typedef ::std::function<float(double, double*)> process_sol_fn;
 
 struct CudaEnumOpts
 {
@@ -48,7 +48,7 @@ struct CudaEnumOpts
 constexpr CudaEnumOpts default_opts = {50, .5, 3, 8, 32 * 256};
 extern CudaEnumOpts used_opts;
 
-std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
+::std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
     const unsigned int enum_dimensions,
     const double* start_point_coefficients, unsigned int start_point_count,
     unsigned int start_point_dim, const double* pruning, double initial_radius,
@@ -62,7 +62,7 @@ std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
  * will correctly free it.
  */
 template <typename InputIt>
-inline std::unique_ptr<double[]>
+inline ::std::unique_ptr<double[]>
 create_start_point_array(size_t start_point_count, size_t start_point_dim,
                          InputIt begin, InputIt end)
 {

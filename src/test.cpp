@@ -215,6 +215,8 @@ void run_tests() {
 #ifdef PERF_TEST
         test_perf();
         std::cout << "test_perf() successful!" << std::endl << std::endl;
+        test_perf_pruning();
+        std::cout << "test_perf_pruning() successful!" << std::endl << std::endl;
 #endif
         std::cout << "=============" << std::endl;
         std::cout << "All test successfull!" << std::endl;

@@ -19,6 +19,8 @@
 
 namespace cuenum {
 
+    using namespace cuenum;
+
     template <int min> struct int_marker
     {
     };
@@ -49,7 +51,7 @@ namespace cuenum {
         }
 
         template <int dimensions_per_level, int levels>
-        inline std::vector<uint64_t> search_enumeration_choose_levels(int_marker<dimensions_per_level>, int_marker<levels>, int_marker<0>)
+        inline ::std::vector<uint64_t> search_enumeration_choose_levels(int_marker<dimensions_per_level>, int_marker<levels>, int_marker<0>)
         {
             if (enum_levels != levels) {
                 throw "enumeration dimension must be within the allowed interval";
@@ -75,7 +77,7 @@ namespace cuenum {
 	};
 
 
-    typedef std::function<void(const enumi*, enumf)> simple_callback_fn;
+    typedef ::std::function<void(const enumi*, enumf)> simple_callback_fn;
 
     template<unsigned int max_dim, int dims>
     inline void recenum_choose_template_instance(
@@ -113,7 +115,7 @@ namespace cuenum {
     }
 	
     template<unsigned int max_startdim>
-    std::unique_ptr<enumi[]> enumerate_start_points(const int dim, const int start_dims, const enumf* pruning, enumf radius_squared, const enumf* mu, const enumf* rdiag, unsigned int& start_point_count, uint64_t* nodes) {
+    ::std::unique_ptr<enumi[]> enumerate_start_points(const int dim, const int start_dims, const enumf* pruning, enumf radius_squared, const enumf* mu, const enumf* rdiag, unsigned int& start_point_count, uint64_t* nodes) {
 
         std::multimap<enumf, std::vector<enumi>> start_points;
 
@@ -138,14 +140,26 @@ namespace cuenum {
         return create_start_point_array(start_points.size(), start_dims, start_points.begin(), start_points.end());
     }
 
-    std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
+    ::std::vector<uint64_t> search_enumeration(const double* mu, const double* rdiag,
         const unsigned int enum_dimensions,
         const double* start_point_coefficients, unsigned int start_point_count,
         unsigned int start_point_dim, const double* pruning, double initial_radius,
         process_sol_fn evaluator, CudaEnumOpts opts)
     {
         CudaWrapper wrapper(mu, rdiag, enum_dimensions, start_point_coefficients, start_point_dim, start_point_count, pruning, initial_radius, evaluator, opts);
-        return wrapper.search_enumeration_choose_levels(int_marker<3>(), int_marker<11>(), int_marker<0>());
+        if (opts.dimensions_per_level != 3) { throw; }
+        if (enum_dimensions % 3 != 0) { throw; }
+        auto levels = enum_dimensions / 3;
+        if (levels == 4)
+            return wrapper.search_enumeration_choose_levels(int_marker<3>(), int_marker<4>(), int_marker<0>());
+        else if (levels == 11)
+            return wrapper.search_enumeration_choose_levels(int_marker<3>(), int_marker<11>(), int_marker<0>());
+        else if (levels == 18)
+            return wrapper.search_enumeration_choose_levels(int_marker<3>(), int_marker<18>(), int_marker<0>());
+        else if (levels == 14)
+            return wrapper.search_enumeration_choose_levels(int_marker<3>(), int_marker<14>(), int_marker<0>());
+        else
+            throw;
     }
 
     CudaEnumOpts used_opts = default_opts;

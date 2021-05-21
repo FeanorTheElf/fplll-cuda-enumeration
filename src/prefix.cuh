@@ -120,7 +120,7 @@ public:
     }
 };
 
-template <unsigned int block_size> class PrefixCounter<cooperative_groups::thread_block_tile<32>, block_size>
+template <unsigned int block_size, typename PG> class PrefixCounter<cooperative_groups::thread_block_tile<32, PG>, block_size>
 {
 
 public:
@@ -132,7 +132,7 @@ public:
 
   constexpr static unsigned int shared_mem_size_in_bytes = 0;
 
-  __device__ inline unsigned int prefix_count(cooperative_groups::thread_block_tile<32> &group,
+  __device__ inline unsigned int prefix_count(cooperative_groups::thread_block_tile<32, PG> &group,
                                               bool predicate, unsigned int &total_len)
   {
     assert(blockDim.x == block_size);
@@ -175,5 +175,33 @@ public:
         return 0;
     }
 };
+
+template<typename CG, typename T, unsigned int max_index>
+DEVICE_HOST_FUNCTION inline T load_permuted(CG& group, const T* base, unsigned int index, void* shared_mem) {
+    assert(index < max_index);
+    T* mem = reinterpret_cast<T*>(shared_mem);
+    for (unsigned int i = group.thread_rank(); i < max_index; i += group.size()) {
+        mem[i] = base[i];
+    }
+    group.sync();
+    return mem[index];
+}
+
+template<typename CG, typename T, unsigned int max_index>
+DEVICE_HOST_FUNCTION inline void store_permuted(CG& group, T* base, unsigned int index, T value, void* shared_mem) {
+    assert(index < max_index);
+    T* mem = reinterpret_cast<T*>(shared_mem);
+    for (unsigned int i = group.thread_rank(); i < max_index; i += group.size()) {
+        mem[i] = NAN;
+    }
+    group.sync();
+    mem[index] = value;
+    group.sync();
+    for (unsigned int i = group.thread_rank(); i < max_index; i += group.size()) {
+        if (!isnan(mem[i])) {
+            base[i] = mem[i];
+        }
+    }
+}
 
 #endif

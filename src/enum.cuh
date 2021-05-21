@@ -49,6 +49,10 @@
         * A node is a dimensions_per_level-level subtree of the enumeration tree that is traversed via
         * enumerate_recursive() and is given by the point corresponding to its root, i.e. a point in the
         * sublattice spanned by the last level * dimensions_per_level basis vectors.
+        * The nodes at level 0 correspond to the roots of the subtrees passed to the GPU. The nodes at level
+        * levels are the leaves of the enumeration tree, but will not be stored explicitly. Therefore, the
+        * last level (levels - 1) will contain the nodes that have still dimensions_per_level unset
+        * coefficients.
         *
         * This class is not itself the store, as it does not own the values, it just wraps the pointer to the
         * memory to provide abstract access functionality.
@@ -82,30 +86,30 @@
            constexpr static size_t content_memory_size_in_bytes =
                enumeration_x_size_in_bytes + coefficient_size_in_bytes + center_partsum_size_in_bytes +
                partdist_size_in_bytes + parent_indices_size_in_bytes + open_node_count_size_in_bytes;
-   
+
            // coefficients of the children enumeration for this point, used to pause and resume
-           // enumerate_recursive() shape [levels, dimensions_per_level, max_nodes_per_level]
+           // enumerate_recursive() shape; [levels, dimensions_per_level, max_nodes_per_level]
            __device__ __host__ inline enumi* enumeration_x() {
                return reinterpret_cast<enumi*>(memory + center_partsum_size_in_bytes +
                    partdist_size_in_bytes);
            }
    
            // last dimensions_per_level coefficients of the point, the other coefficients must be retrieved
-           // by querying the parent node shape [levels, dimensions_per_level, max_nodes_per_level]
+           // by querying the parent node; shape [levels, dimensions_per_level, max_nodes_per_level]
            __device__ __host__ inline enumi* coefficients() {
                return reinterpret_cast<enumi*>(memory + center_partsum_size_in_bytes +
                    partdist_size_in_bytes +
                    enumeration_x_size_in_bytes);
            }
    
-           // inner products with the scaled lattice vectors of the point, only the first (levels - level) *
-           // dimensions_per_level are of interest shape [levels, dimensions, max_nodes_per_level]
+           // inner products with the scaled lattice vectors and the point, only the first (levels - level) *
+           // dimensions_per_level are of interest; shape [levels, dimensions, max_nodes_per_level]
            __device__ __host__ inline enumf* center_partsum() {
                return reinterpret_cast<enumf*>(memory);
            }
    
            // squared norm of the point, projected into the perpendicular subspace to the first (levels -
-           // level) * dimensions_per_level basis vectors shape [levels, max_nodes_per_level]
+           // level) * dimensions_per_level basis vectors; shape [levels, max_nodes_per_level]
            __device__ __host__ inline enumf* partdist() {
                return reinterpret_cast<enumf*>(memory + center_partsum_size_in_bytes);
            }
@@ -212,19 +216,58 @@
                    value.partdist[dimensions_per_level - 1]);
            }
    
-           __device__ __host__ inline void init_subtree(unsigned int tree_level, unsigned int index,
-               enumf parent_partdist, enumf center)
+           /**
+           * Given an existing node (with correct parent, coefficients) initializes
+           * enumeration_x to allow children enumeration;
+           * Expects the single center partsum that is used as center to be initialized, the others
+           * may be still uninitialized. Note that partdist and some of the other center partsums
+           * are also required for children enumeration, but are not touched by this function.
+           */
+           __device__ __host__ inline void init_enumeration(unsigned int tree_level, unsigned int index)
            {
                for (unsigned int i = 0; i < dimensions_per_level; ++i)
                {
                    enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                        i * max_nodes_per_level + index] = NAN;
                }
-               partdist()[tree_level * max_nodes_per_level + index] = parent_partdist;
+               const unsigned int kk_offset = (levels - tree_level - 1) * dimensions_per_level;
+               const enumf center = get_center_partsum(tree_level, index, kk_offset + dimensions_per_level - 1);
+               assert(!isnan(center));
                enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                    (dimensions_per_level - 1) * max_nodes_per_level + index] =
                    static_cast<enumi>(round(center));
-               assert(!isnan(static_cast<enumi>(round(center))));
+           }
+
+           /**
+           * Checks whether the partsums for a specific target level are initialized by checking a representative entry.
+           * Note that one should always initialize all or no partsums for a given level in a certain node, otherwise
+           * the information from this function will be too coarse-grained and hence wrong.
+           */
+           __device__ __host__ inline bool are_partsums_initialized(unsigned int tree_level, unsigned int index, unsigned int target_level)
+           {
+               const unsigned int kk_offset = (levels - target_level - 1) * dimensions_per_level;
+               return !isnan(get_center_partsum(tree_level, index, kk_offset + dimensions_per_level - 1));
+           }
+
+           /**
+           * Given an existing node initializes the enumeration_x and center partsums with an
+           * empty value such that it can be detected and computed later.
+           * This will leave the parent and coefficients unchanged, as it will usually be used
+           * to allow lazy computation of the center data for this node.
+           * 
+           * Usually when adding a node, call clear_enumeration(), then set partsums later, and
+           * then call init_enumeration().
+           */
+           __device__ __host__ inline void clear_enumeration(unsigned int tree_level, unsigned int index) {
+               for (unsigned int i = 0; i < dimensions_per_level; ++i)
+               {
+                   enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
+                       i * max_nodes_per_level + index] = NAN;
+               }
+               for (unsigned int i = 0; i < (levels - tree_level) * dimensions_per_level; ++i) {
+                   center_partsum()[tree_level * dimensions * max_nodes_per_level +
+                       i * max_nodes_per_level + index] = NAN;
+               }
            }
    
            __device__ __host__ inline void set_center_partsum(unsigned int tree_level, unsigned int index,
@@ -296,6 +339,17 @@
                return open_node_count()[tree_level];
            }
    
+           /**
+           * Adds a node on the given tree level with the given parent to the buffer.
+           * The coefficients of this node should be initialized directly afterwards via
+           * set_coefficient(). After this is done, the node correctly exists but is not yet 
+           * initialized for children enumeration, as center_partsum, partdist and enumeration_x
+           * are missing.
+           * 
+           * To initialize them, call init_enumeration. After this is done, the node is called fully 
+           * initialized. The center partsums must be additionally set before the actual children 
+           * enumeration takes place.
+           */
            __device__ __host__ inline unsigned int add_node(unsigned int tree_level,
                unsigned int parent_node_index)
            {
@@ -455,8 +509,8 @@
            {
                buffer.set_coefficient(level, new_index, j, x[j]);
            }
+           buffer.clear_enumeration(level, new_index);
            buffer.set_partdist(level, new_index, squared_norm);
-           // subtree initialization will be done later in a synchronized way
        }
    
        /**
@@ -564,24 +618,106 @@
                        }
                    }
                }
-   
-               enumf center = buffer.get_center_partsum(level, new_index, center_i);
-               assert(!isnan(center));
-               buffer.set_center_partsum(level, new_index, center_i, center);
-   
-               enumf partdist = buffer.get_partdist(level, new_index);
-               buffer.init_subtree(level, new_index, partdist, center);
+  
+               buffer.init_enumeration(level, new_index);
+           }
+       }
+
+       /**
+       * 
+       */
+       template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
+           unsigned int max_nodes_per_level>
+       __device__ __host__ void ensure_enumeration_initialized(
+           CG& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
+           int level, int target_level, Matrix mu, const enumf* rdiag, int index
+       ) {
+           unsigned int current_level = level;
+           // we need partsums from target_partsum_index_begin to (target_partsum_index_begin - dimensions_per_level + 1) inclusive
+           const unsigned int offset_kk = (levels - target_level - 1) * dimensions_per_level;
+
+           bool is_initialized;
+           bool all_initialized;
+           // search for the lowest level which has the required partsums set
+           do {
+               const unsigned int node_count = buffer.get_node_count(current_level);
+               const unsigned int active_thread_count = min(node_count, group.size());
+               const unsigned int index = node_count - active_thread_count + group.thread_rank();
+               is_initialized = group.thread_rank() >= active_thread_count || buffer.are_partsums_initialized(current_level, index, target_level);
+               all_initialized = group.all(is_initialized);
+               current_level -= 1;
+           } while (current_level != std::numeric_limits<unsigned int>::max() && !all_initialized);
+
+           current_level += 1;
+           // now this level has partsums set
+
+           enumi x[dimensions_per_level];
+           enumf partsums[dimensions_per_level];
+           unsigned int node_count;
+
+           {
+               node_count = buffer.get_node_count(current_level);
+               const unsigned int active_thread_count = min(node_count, group.size());
+               const unsigned int index = node_count - active_thread_count + group.thread_rank();
+               if (group.thread_rank() < active_thread_count) {
+                   for (unsigned int i = 0; i < dimensions_per_level; ++i) {
+                       partsums[i] = buffer.get_center_partsum(current_level, index, offset_kk + i);
+                   }
+               }
+               current_level += 1;
+           }
+
+           for (; current_level <= level; ++current_level) {
+               const unsigned int this_node_count = buffer.get_node_count(current_level);
+               const unsigned int active_thread_count = min(this_node_count, group.size());
+               const unsigned int index = this_node_count - active_thread_count + group.thread_rank();
+
+               unsigned int parent_index;
+               if (group.thread_rank() < active_thread_count) {
+                   parent_index = buffer.get_parent_index(current_level, index);
+                   for (unsigned int j = 0; j < dimensions_per_level; ++j)
+                   {
+                       x[j] = buffer.get_coefficient(current_level, index, j);
+                   }
+               }
+               else {
+                   parent_index = node_count - 1;
+               }
+
+               const unsigned int lane_id_of_parent = min(node_count, group.size()) + parent_index - node_count;
+
+               for (unsigned int i = 0; i < dimensions_per_level; ++i) {
+
+                   const enumf parent_center_partsum = group.shfl(partsums[i], lane_id_of_parent);
+                   assert(!isnan(parent_center_partsum)); 
+
+                   if (group.thread_rank() < active_thread_count) {
+                       partsums[i] = parent_center_partsum + calc_center_partsum_delta<levels, dimensions_per_level>(current_level, index, offset_kk + i, x, mu);
+                       buffer.set_center_partsum(current_level, index, offset_kk + i, partsums[i]);
+                   }
+                   else {
+                       partsums[i] = NAN;
+                   }
+               }
+
+               if (current_level == level && group.thread_rank() < active_thread_count) {
+                   buffer.init_enumeration(level, index);
+               }
+
+               node_count = this_node_count;
            }
        }
    
        /**
-        * Generates more children for the last group.size() nodes on the given level and adds them to the
-        * buffer. The subtree enumerations of the processed nodes are accordingly updated so that they will
-        * only yield new children.
-        */
+       * Generates more children for the last group.size() nodes on the given level and adds them to the
+       * buffer. The subtree enumerations of the processed nodes are accordingly updated so that they will
+       * only yield new children.
+       * 
+       * Synchronization: count(level) write(level) add(level + 1)
+       */
        template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
            unsigned int max_nodes_per_level>
-           __device__ __host__ void generate_nodes_children(
+       __device__ __host__ void generate_children(
                CG& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
                int level, Matrix mu, const enumf* rdiag, const enumf* pruning_bounds,
                unsigned int max_subtree_paths, PerfCounter& counter)
@@ -598,8 +734,12 @@
            const unsigned int offset_kk = (levels - level - 1) * dimensions_per_level;
            unsigned int existing_nodes = buffer.get_node_count(level + 1);
    
+           ensure_enumeration_initialized(
+               group, buffer, level, level, mu, rdiag, index
+           );
+
            group.sync();
-   
+
            if (active)
            {
                CudaEnumeration<dimensions_per_level> enumeration = buffer.get_enumeration(
@@ -618,22 +758,18 @@
    
                    buffer.set_enumeration(level, index, enumeration);
                }
-   
            }
-   
-           group.sync();
-   
-           init_new_nodes(group, level + 1, existing_nodes, buffer, mu, counter);
+
        }
    
        /**
-        * Searches the subtrees of the last group.size() nodes on the last tree level, possibly finding a
-        * new nonzero shortest vector. The subtree enumerations of the processed nodes are accordingly
-        * updated so that they will only yield new vectors.
-        */
+       * Searches the subtrees of the last group.size() nodes on the last tree level, possibly finding a
+       * new nonzero shortest vector. The subtree enumerations of the processed nodes are accordingly
+       * updated so that they will only yield new vectors.
+       */
        template <typename CG, typename eval_sol_fn, unsigned int levels, unsigned int dimensions_per_level,
            unsigned int max_nodes_per_level>
-           __device__ __host__ void inline process_leaf_nodes(
+           __device__ __host__ void inline consume_leaves(
                CG& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
                Matrix mu, const enumf* rdiag, const enumf* pruning_bounds, unsigned int max_paths,
                eval_sol_fn& process_sol, const enumi* start_points, unsigned int start_point_dim,
@@ -644,7 +780,13 @@
            const unsigned int index =
                buffer.get_node_count(level) - active_thread_count + group.thread_rank();
            const bool active = index < buffer.get_node_count(level);
-   
+
+           ensure_enumeration_initialized(
+               group, buffer, level, level, mu, rdiag, index
+           );
+
+           group.sync();
+
            if (active)
            {
                CudaEnumeration<dimensions_per_level> enumeration =
@@ -746,7 +888,7 @@
         */
        template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
            unsigned int max_nodes_per_level>
-           __device__ __host__ inline void generate_level_children(
+           __device__ __host__ inline void process_inner_level(
                CG& group, unsigned int* shared_counter,
                SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
                Matrix mu, const enumf* rdiag, const enumf* pruning_bounds, PerfCounter counter,
@@ -756,7 +898,7 @@
    
            while (true)
            {
-               generate_nodes_children(group, buffer, level, mu, rdiag, pruning_bounds, opts.max_subtree_paths, counter);
+               generate_children(group, buffer, level, mu, rdiag, pruning_bounds, opts.max_subtree_paths, counter);
    
                group.sync();
    
@@ -795,7 +937,7 @@
            const unsigned int level = levels - 1;
            while (buffer.get_node_count(level) > 0)
            {
-               process_leaf_nodes(group, buffer, mu, rdiag, pruning_bounds, opts.max_subtree_paths,
+               consume_leaves(group, buffer, mu, rdiag, pruning_bounds, opts.max_subtree_paths,
                    process_sol, start_points, start_point_dim, node_counter);
                remove_done_nodes(group, prefix_counter, buffer, level, mu, rdiag, pruning_bounds);
                group.sync();
@@ -845,7 +987,7 @@
                {
                    if (buffer.get_node_count(level) > 0)
                    {
-                       generate_level_children(group, shared_counter, buffer, level, mu, rdiag,
+                       process_inner_level(group, shared_counter, buffer, level, mu, rdiag,
                            pruning_bounds, node_counter, opts);
                        ++level;
                    }
@@ -895,7 +1037,7 @@
                unsigned char* point_stream_memory,
                Opts<levels, dimensions_per_level, max_nodes_per_level> opts)
        {
-           typedef cooperative_groups::thread_block_tile<32> CG;
+           typedef cooperative_groups::thread_block_tile<32, cooperative_groups::thread_block> CG;
            typedef SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> SubtreeBuffer;
            typedef PointStreamEvaluator<enumerate_point_stream_buffer_size> Evaluator;
    
@@ -911,7 +1053,7 @@
    
            __shared__ unsigned char shared_mem[shared_mem_size];
    
-           CG group = cooperative_groups::tiled_partition<32>(cooperative_groups::this_thread_block());
+           CG group = cooperative_groups::tiled_partition<32, cooperative_groups::thread_block>(cooperative_groups::this_thread_block());
            const unsigned int group_id = thread_id() / enumerate_cooperative_group_size;
            const unsigned int group_id_in_block = thread_id_in_block() / enumerate_cooperative_group_size;
            assert(group.size() == enumerate_cooperative_group_size);
@@ -992,7 +1134,8 @@
                        partdist += alpha * alpha * rdiag[dimensions + j];
                        assert(partdist >= 0);
                    }
-                   buffer.init_subtree(0, index, partdist, buffer.get_center_partsum(0, index, dimensions - 1));
+                   buffer.set_partdist(0, index, partdist);
+                   buffer.init_enumeration(0, index);
                }
                if (CUENUM_TRACE && thread_id() == 0)
                {

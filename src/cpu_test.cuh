@@ -91,7 +91,7 @@ namespace cuenum {
                     partdist += alpha * alpha * rdiag[dimensions + j];
                     assert(partdist >= 0);
                 }
-                buffer.init_subtree(0, index, partdist, buffer.get_center_partsum(0, index, dimensions - 1));
+                buffer.init_enumeration(0, index, partdist, buffer.get_center_partsum(0, index, dimensions - 1));
             }
             if (CUENUM_TRACE && thread_id() == 0)
             {

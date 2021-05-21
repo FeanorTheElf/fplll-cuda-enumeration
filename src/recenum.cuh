@@ -105,7 +105,7 @@ public:
 
   template <unsigned int levels, unsigned int dimensions_per_level,
             unsigned int max_nodes_per_level>
-  friend struct SubtreeEnumerationBuffer;
+  friend class SubtreeEnumerationBuffer;
 };
 
 template <unsigned int maxdim>

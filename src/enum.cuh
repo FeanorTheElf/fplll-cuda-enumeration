@@ -530,354 +530,6 @@
            return center_partsum;
        }
 
-       template <unsigned int levels, unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
-       struct TreeLevelEnumerator {
-
-
-
-       };
-   
-       /**
-        * Initializes newly generated nodes with all information necessary to perform subtree enumeration,
-        * namely the center_partsums and the partdist. Requires the coefficients of these nodes to be
-        * already stored in the tree buffer.
-        *
-        * Newly generated nodes are all nodes on the given level, except the already_calculated_node_count
-        * first nodes.
-        */
-       template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
-           unsigned int max_nodes_per_level>
-           __device__ __host__ inline void
-           init_new_nodes(CG& group, unsigned int level, unsigned int already_calculated_node_count,
-               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
-               Matrix mu, PerfCounter& counter)
-       {
-           for (unsigned int new_index = already_calculated_node_count + group.thread_rank();
-               new_index < buffer.get_node_count(level); new_index += group.size())
-           {
-               unsigned int kk_offset = (levels - level - 1) * dimensions_per_level;
-               unsigned int center_i = kk_offset + dimensions_per_level - 1;
-   
-               const unsigned int parent_index = buffer.get_parent_index(level, new_index);
-               enumi x[dimensions_per_level];
-               for (unsigned int j = 0; j < dimensions_per_level; ++j)
-               {
-                   x[j] = buffer.get_coefficient(level, new_index, j);
-               }
-   
-               // sets center_partsum[i] = parent_center_partsum[i] + calc_center_partsum_delta(..., i)
-               // to reduce latency, the loop is transformed as to load data now that is needed after some loop
-               // cycles (-> software pipelining)
-               constexpr unsigned int loop_preload_count = 3;
-               constexpr unsigned int loop_preload_offset = loop_preload_count - 1;
-               unsigned int i = 0;
-               enumf center_partsum;
-               enumf preloaded_parent_center_partsums[loop_preload_count];
-   
-   #pragma unroll
-               for (unsigned int j = 0; j < loop_preload_offset; ++j)
-               {
-                   preloaded_parent_center_partsums[j] = buffer.get_center_partsum(level - 1, parent_index, j);
-               }
-   
-               for (; i + 2 * loop_preload_offset < kk_offset + dimensions_per_level; i += loop_preload_count)
-               {
-   #pragma unroll
-                   for (unsigned int j = 0; j < loop_preload_count; ++j)
-                   {
-                       preloaded_parent_center_partsums[(j + loop_preload_offset) % loop_preload_count] =
-                           buffer.get_center_partsum(level - 1, parent_index, i + j + loop_preload_offset);
-   
-                       assert(preloaded_parent_center_partsums[j] ==
-                           buffer.get_center_partsum(level - 1, parent_index, i + j));
-                       center_partsum =
-                           preloaded_parent_center_partsums[j] +
-                           calc_center_partsum_delta<levels, dimensions_per_level>(level, new_index, i + j, x, mu);
-                       buffer.set_center_partsum(level, new_index, i + j, center_partsum);
-                   }
-               }
-   
-               assert(i + 2 * loop_preload_offset - loop_preload_count + 1 <=
-                   kk_offset + dimensions_per_level);
-               assert(i + 2 * loop_preload_offset >= kk_offset + dimensions_per_level);
-   
-   #pragma unroll
-               for (unsigned int ii = 2 * loop_preload_offset - loop_preload_count + 1;
-                   ii <= 2 * loop_preload_offset; ++ii)
-               {
-                   if (i + ii == kk_offset + dimensions_per_level)
-                   {
-   #pragma unroll
-                       for (unsigned int j = 0; j < ii; ++j)
-                       {
-                           if (j + loop_preload_offset < ii)
-                           {
-                               preloaded_parent_center_partsums[(j + loop_preload_offset) % loop_preload_count] =
-                                   buffer.get_center_partsum(level - 1, parent_index, i + j + loop_preload_offset);
-                           }
-                           assert(preloaded_parent_center_partsums[j % loop_preload_count] ==
-                               buffer.get_center_partsum(level - 1, parent_index, i + j));
-                           center_partsum = preloaded_parent_center_partsums[j % loop_preload_count] +
-                               calc_center_partsum_delta<levels, dimensions_per_level>(level, new_index,
-                                   i + j, x, mu);
-                           buffer.set_center_partsum(level, new_index, i + j, center_partsum);
-                       }
-                   }
-               }
-  
-               buffer.init_enumeration(level, new_index);
-           }
-       }
-
-       /**
-       * 
-       */
-       template <typename SyncGroup, unsigned int levels, unsigned int dimensions_per_level,
-           unsigned int max_nodes_per_level>
-       __device__ __host__ void ensure_enumeration_initialized(
-           SyncGroup& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
-           int level, int target_level, Matrix mu, const enumf* rdiag, int index
-       ) {
-           unsigned int current_level = level;
-           // we need partsums from target_partsum_index_begin to (target_partsum_index_begin - dimensions_per_level + 1) inclusive
-           const unsigned int offset_kk = (levels - target_level - 1) * dimensions_per_level;
-
-           bool is_initialized;
-           bool all_initialized;
-           // search for the lowest level which has the required partsums set
-           do {
-               const unsigned int node_count = buffer.get_node_count(current_level);
-               const unsigned int active_thread_count = min(node_count, group.size());
-               const unsigned int index = node_count - active_thread_count + group.thread_rank();
-               is_initialized = group.thread_rank() >= active_thread_count || buffer.are_partsums_initialized(current_level, index, target_level);
-               all_initialized = group.all(is_initialized);
-               current_level -= 1;
-           } while (current_level != std::numeric_limits<unsigned int>::max() && !all_initialized);
-
-           current_level += 1;
-           // now this level has partsums set
-
-           enumi x[dimensions_per_level];
-           enumf partsums[dimensions_per_level];
-           unsigned int node_count;
-
-           {
-               node_count = buffer.get_node_count(current_level);
-               const unsigned int active_thread_count = min(node_count, group.size());
-               const unsigned int index = node_count - active_thread_count + group.thread_rank();
-               if (group.thread_rank() < active_thread_count) {
-                   for (unsigned int i = 0; i < dimensions_per_level; ++i) {
-                       partsums[i] = buffer.get_center_partsum(current_level, index, offset_kk + i);
-                   }
-               }
-               current_level += 1;
-           }
-
-           for (; current_level <= level; ++current_level) {
-               const unsigned int this_node_count = buffer.get_node_count(current_level);
-               const unsigned int active_thread_count = min(this_node_count, group.size());
-               const unsigned int index = this_node_count - active_thread_count + group.thread_rank();
-
-               unsigned int parent_index;
-               if (group.thread_rank() < active_thread_count) {
-                   parent_index = buffer.get_parent_index(current_level, index);
-                   for (unsigned int j = 0; j < dimensions_per_level; ++j)
-                   {
-                       x[j] = buffer.get_coefficient(current_level, index, j);
-                   }
-               }
-               else {
-                   parent_index = node_count - 1;
-               }
-
-               const unsigned int lane_id_of_parent = min(node_count, group.size()) + parent_index - node_count;
-
-               for (unsigned int i = 0; i < dimensions_per_level; ++i) {
-
-                   const enumf parent_center_partsum = group.shuffle(partsums[i], lane_id_of_parent);
-                   assert(!isnan(parent_center_partsum)); 
-
-                   if (group.thread_rank() < active_thread_count) {
-                       partsums[i] = parent_center_partsum + calc_center_partsum_delta<levels, dimensions_per_level>(current_level, index, offset_kk + i, x, mu);
-                       buffer.set_center_partsum(current_level, index, offset_kk + i, partsums[i]);
-                   }
-                   else {
-                       partsums[i] = NAN;
-                   }
-               }
-
-               if (current_level == level && group.thread_rank() < active_thread_count) {
-                   buffer.init_enumeration(level, index);
-               }
-
-               node_count = this_node_count;
-           }
-       }
-   
-       /**
-       * Generates more children for the last group.size() nodes on the given level and adds them to the
-       * buffer. The subtree enumerations of the processed nodes are accordingly updated so that they will
-       * only yield new children.
-       * 
-       * Synchronization: count(level) write(level) add(level + 1)
-       */
-       template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
-           unsigned int max_nodes_per_level>
-       __device__ __host__ void generate_children(
-               CG& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
-               int level, Matrix mu, const enumf* rdiag, const enumf* pruning_bounds,
-               unsigned int max_subtree_paths, PerfCounter& counter)
-       {
-           assert(level < levels - 1);
-           assert(level >= 0);
-   
-           const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
-           const unsigned int index =
-               buffer.get_node_count(level) - active_thread_count + group.thread_rank();
-           const bool active = index < buffer.get_node_count(level);
-   
-           unsigned int max_paths = max_subtree_paths;
-           const unsigned int offset_kk = (levels - level - 1) * dimensions_per_level;
-           unsigned int existing_nodes = buffer.get_node_count(level + 1);
-   
-           ensure_enumeration_initialized(
-               group, buffer, level, level, mu, rdiag, index
-           );
-
-           group.sync();
-
-           if (active)
-           {
-               CudaEnumeration<dimensions_per_level> enumeration = buffer.get_enumeration(
-                   level, index, mu.block(offset_kk, offset_kk), rdiag, pruning_bounds);
-   
-               bool is_done = enumeration.template is_enumeration_done<dimensions_per_level - 1>();
-   
-               if (!is_done)
-               {
-                   typedef AddToTreeCallback<levels, dimensions_per_level, max_nodes_per_level> CallbackType;
-                   CallbackType callback = { static_cast<unsigned int>(level + 1), index, mu, buffer };
-                   PerfCounter offset_counter = counter.offset_level(offset_kk);
-                   CoefficientIterator iter;
-                   enumeration.enumerate_recursive(
-                       callback, max_paths, offset_counter, kk_marker<dimensions_per_level - 1>(), iter);
-   
-                   buffer.set_enumeration(level, index, enumeration);
-               }
-           }
-
-       }
-   
-       /**
-       * Searches the subtrees of the last group.size() nodes on the last tree level, possibly finding a
-       * new nonzero shortest vector. The subtree enumerations of the processed nodes are accordingly
-       * updated so that they will only yield new vectors.
-       */
-       template <typename CG, typename eval_sol_fn, unsigned int levels, unsigned int dimensions_per_level,
-           unsigned int max_nodes_per_level>
-           __device__ __host__ void inline consume_leaves(
-               CG& group, SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
-               Matrix mu, const enumf* rdiag, const enumf* pruning_bounds, unsigned int max_paths,
-               eval_sol_fn& process_sol, const enumi* start_points, unsigned int start_point_dim,
-               PerfCounter& node_counter)
-       {
-           const unsigned int level = levels - 1;
-           const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
-           const unsigned int index =
-               buffer.get_node_count(level) - active_thread_count + group.thread_rank();
-           const bool active = index < buffer.get_node_count(level);
-
-           ensure_enumeration_initialized(
-               group, buffer, level, level, mu, rdiag, index
-           );
-
-           group.sync();
-
-           if (active)
-           {
-               CudaEnumeration<dimensions_per_level> enumeration =
-                   buffer.get_enumeration(level, index, mu, rdiag, pruning_bounds);
-   
-               typedef ProcessLeafCallback<eval_sol_fn, levels, dimensions_per_level, max_nodes_per_level>
-                   CallbackT;
-               CallbackT callback = { level + 1, index,        start_point_dim,         process_sol,
-                                      mu,        start_points, buffer };
-               CoefficientIterator iter;
-               enumeration.enumerate_recursive(
-                   callback, max_paths, node_counter, kk_marker<dimensions_per_level - 1>(), iter);
-   
-               buffer.set_enumeration(level, index, enumeration);
-           }
-       }
-   
-       /**
-        * Calculates the count of nodes among the last roup.size() nodes on the given level whose subtrees
-        * have nodes not exceeding the radius limit.
-        */
-       template <typename CG, unsigned int levels, unsigned int dimensions_per_level,
-           unsigned int max_nodes_per_level>
-           __device__ __host__ inline unsigned int get_done_node_count(
-               CG& group, unsigned int* shared_counter,
-               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
-               Matrix mu, const enumf* rdiag, const enumf* pruning_bounds)
-       {
-           const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
-           const unsigned int index =
-               buffer.get_node_count(level) - active_thread_count + group.thread_rank();
-           const bool active = index < buffer.get_node_count(level);
-    
-           const unsigned int offset_kk = (levels - level - 1) * dimensions_per_level;
-   
-           *shared_counter = 0;
-   
-           group.sync();
-   
-           if (active)
-           {
-               bool is_done = buffer
-                   .get_enumeration(level, index, mu.block(offset_kk, offset_kk), rdiag, pruning_bounds)
-                   .template is_enumeration_done<dimensions_per_level - 1>();
-   
-               if (is_done)
-               {
-                   aggregated_atomic_inc(shared_counter);
-               }
-           }
-   
-           group.sync();
-   
-           return *shared_counter;
-       }
-   
-       /**
-        * Removes all nodes among the last group.size() nodes on the given level whose subtrees have nodes
-        * with partdist exceeding the radius limit. Be careful as the buffer can still have nodes
-        * referencing such a done node as a parent node, since the enumeration data is updated when
-        * children are generated, not when children are fully processed.
-        */
-       template <typename SyncGroup, unsigned int levels,
-           unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
-           __device__ __host__ inline void remove_done_nodes(
-               SyncGroup& group,
-               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
-               Matrix mu, const enumf* rdiag, const enumf* pruning_bounds)
-       {
-           const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
-           const unsigned int index =
-               buffer.get_node_count(level) - active_thread_count + group.thread_rank();
-           const bool active = index < buffer.get_node_count(level);
-   
-           const unsigned int offset_kk = (levels - level - 1) * dimensions_per_level;
-   
-           bool is_done = buffer
-               .get_enumeration(level, index, mu.block(offset_kk, offset_kk), rdiag, pruning_bounds)
-               .template is_enumeration_done<dimensions_per_level - 1>();
-   
-           group.sync();
-   
-           buffer.filter_nodes(group, level, index, !is_done, active_thread_count);
-       }
-   
        struct StrategyOpts
        {
            unsigned int max_subtree_paths;
@@ -887,128 +539,459 @@
            // stop children generation when the count of children exceeds this limit
            unsigned int max_children_buffer_size;
        };
-   
-       /**
-        * Generates children from the last group.size() nodes on level and adds them to the buffer, until
-        * either the children buffer is full or most of these nodes are done.
-        */
-       template <typename SyncGroup, unsigned int levels, unsigned int dimensions_per_level,
-           unsigned int max_nodes_per_level>
-           __device__ __host__ inline void process_inner_level(
-               SyncGroup& group, unsigned int* shared_counter,
-               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, int level,
-               Matrix mu, const enumf* rdiag, const enumf* pruning_bounds, PerfCounter counter,
-               StrategyOpts opts)
-       {
-           const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
-   
-           while (true)
-           {
-               generate_children(group, buffer, level, mu, rdiag, pruning_bounds, opts.max_subtree_paths, counter);
-   
-               group.sync();
-   
-               const unsigned int done_node_count = get_done_node_count(group, shared_counter, buffer, level,
-                   mu, rdiag, pruning_bounds);
-   
-               group.sync();
-   
-               if (CUENUM_TRACE && thread_id() == 0)
-               {
-                   printf("Thread 0: Worked on level %d, next level points are %d, %d nodes of current working pool (%d) are done\n",
-                       level, buffer.get_node_count(level + 1), *shared_counter, active_thread_count);
-               }
-   
-               if (buffer.get_node_count(level + 1) >= opts.max_children_buffer_size)
-               {
-                   break;
-               }
-               else if (done_node_count >= active_thread_count * (1 - opts.min_active_parents_percentage))
-               {
-                   break;
-               }
-               group.sync();
+
+       template <unsigned int levels, unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
+       struct TreeLevelEnumerator {
+
+       private:
+           SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level>& buffer;
+           const Matrix& mu;
+           const enumf* rdiag;
+           PerfCounter& counter;
+           const enumf* pruning_bounds;
+           const enumi* start_points; 
+           const unsigned int start_point_dim;
+           const StrategyOpts& opts;
+
+       public:
+
+           int level;
+
+           __device__ __host__ TreeLevelEnumerator(
+               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level>& buffer,
+               const Matrix& mu,
+               const enumf* rdiag,
+               PerfCounter& counter,
+               const enumf* pruning_bounds,
+               const enumi* start_points,
+               unsigned int start_point_dim,
+               const StrategyOpts& opts
+           )
+               : buffer(buffer), mu(mu), rdiag(rdiag), counter(counter), pruning_bounds(pruning_bounds), start_points(start_points), start_point_dim(start_point_dim), opts(opts) {}
+
+           __device__ __host__ inline unsigned int offset_kk() const {
+               return (levels - level - 1) * dimensions_per_level;
            }
-       }
+
+           template<typename SyncGroup>
+           __device__ __host__ void ensure_enumeration_initialized(
+               SyncGroup& group, int target_level
+           ) {
+               const unsigned int first_required_partsum_index = (levels - target_level - 1) * dimensions_per_level;
+               unsigned int current_level = level;
+
+               bool is_initialized;
+               bool all_initialized;
+               // search for the lowest level which has the required partsums set
+               do {
+                   const unsigned int node_count = buffer.get_node_count(current_level);
+                   const unsigned int active_thread_count = min(node_count, group.size());
+                   const unsigned int index = node_count - active_thread_count + group.thread_rank();
+
+                   is_initialized = group.thread_rank() >= active_thread_count 
+                       || buffer.are_partsums_initialized(current_level, index, target_level);
+                   all_initialized = group.all(is_initialized);
+
+                   current_level -= 1;
+               } while (current_level != std::numeric_limits<unsigned int>::max() && !all_initialized);
+
+               current_level += 1;
+               // now this is the lowest level that has partsums set
+
+               enumi x[dimensions_per_level];
+               enumf partsums[dimensions_per_level];
+               unsigned int parent_node_count;
+
+               // load the parent data
+               {
+                   parent_node_count = buffer.get_node_count(current_level);
+                   const unsigned int index = parent_node_count - min(parent_node_count, group.size()) + group.thread_rank();
+                   const unsigned int active = index < parent_node_count;
+
+                   if (active) {
+                       for (unsigned int i = 0; i < dimensions_per_level; ++i) {
+                           partsums[i] = buffer.get_center_partsum(current_level, index, first_required_partsum_index + i);
+                       }
+                   }
+                   current_level += 1;
+               }
+
+               // now fill all currently uninitialized levels
+               for (; current_level <= level; ++current_level) {
+                   const unsigned int node_count = buffer.get_node_count(current_level);
+                   const unsigned int index = node_count - min(node_count, group.size()) + group.thread_rank();
+                   const unsigned int active = index < node_count;
+
+                   unsigned int parent_index;
+                   if (active) {
+                       parent_index = buffer.get_parent_index(current_level, index);
+
+                       // load coefficients
+                       for (unsigned int j = 0; j < dimensions_per_level; ++j)
+                       {
+                           x[j] = buffer.get_coefficient(current_level, index, j);
+                       }
+                   }
+                   else {
+                       parent_index = parent_node_count - 1;
+                   }
+                   const unsigned int lane_id_of_parent = min(parent_node_count, group.size()) + parent_index - parent_node_count;
+
+                   for (unsigned int i = 0; i < dimensions_per_level; ++i) {
+
+                       const enumf parent_center_partsum = group.shuffle(partsums[i], lane_id_of_parent);
+                       assert(!isnan(parent_center_partsum));
+
+                       if (active) {
+                           partsums[i] = parent_center_partsum + calc_center_partsum_delta<levels, dimensions_per_level>(current_level, index, first_required_partsum_index + i, x, mu);
+                           buffer.set_center_partsum(current_level, index, first_required_partsum_index + i, partsums[i]);
+                       }
+                       else {
+                           partsums[i] = NAN;
+                       }
+                   }
+
+                   if (current_level == level && active) {
+                       buffer.init_enumeration(level, index);
+                   }
+
+                   parent_node_count = node_count;
+               }
+           }
+
+           /**
+            * Initializes newly generated nodes with all information necessary to perform subtree enumeration,
+            * namely the center_partsums and the partdist. Requires the coefficients of these nodes to be
+            * already stored in the tree buffer.
+            *
+            * Newly generated nodes are all nodes on the given level, except the already_calculated_node_count
+            * first nodes.
+            */
+           template <typename SyncGroup>
+               __device__ __host__ inline void
+               init_new_nodes(SyncGroup& group, unsigned int already_calculated_node_count
+           ) {
+               for (unsigned int new_index = already_calculated_node_count + group.thread_rank();
+                   new_index < buffer.get_node_count(level); new_index += group.size())
+               {
+                   unsigned int kk_offset = (levels - level - 1) * dimensions_per_level;
+                   unsigned int center_i = kk_offset + dimensions_per_level - 1;
+
+                   const unsigned int parent_index = buffer.get_parent_index(level, new_index);
+                   enumi x[dimensions_per_level];
+                   for (unsigned int j = 0; j < dimensions_per_level; ++j)
+                   {
+                       x[j] = buffer.get_coefficient(level, new_index, j);
+                   }
+
+                   // sets center_partsum[i] = parent_center_partsum[i] + calc_center_partsum_delta(..., i)
+                   // to reduce latency, the loop is transformed as to load data now that is needed after some loop
+                   // cycles (-> software pipelining)
+                   constexpr unsigned int loop_preload_count = 3;
+                   constexpr unsigned int loop_preload_offset = loop_preload_count - 1;
+                   unsigned int i = 0;
+                   enumf center_partsum;
+                   enumf preloaded_parent_center_partsums[loop_preload_count];
+
+#pragma unroll
+                   for (unsigned int j = 0; j < loop_preload_offset; ++j)
+                   {
+                       preloaded_parent_center_partsums[j] = buffer.get_center_partsum(level - 1, parent_index, j);
+                   }
+
+                   for (; i + 2 * loop_preload_offset < kk_offset + dimensions_per_level; i += loop_preload_count)
+                   {
+#pragma unroll
+                       for (unsigned int j = 0; j < loop_preload_count; ++j)
+                       {
+                           preloaded_parent_center_partsums[(j + loop_preload_offset) % loop_preload_count] =
+                               buffer.get_center_partsum(level - 1, parent_index, i + j + loop_preload_offset);
+
+                           assert(preloaded_parent_center_partsums[j] ==
+                               buffer.get_center_partsum(level - 1, parent_index, i + j));
+                           center_partsum =
+                               preloaded_parent_center_partsums[j] +
+                               calc_center_partsum_delta<levels, dimensions_per_level>(level, new_index, i + j, x, mu);
+                           buffer.set_center_partsum(level, new_index, i + j, center_partsum);
+                       }
+                   }
+
+                   assert(i + 2 * loop_preload_offset - loop_preload_count + 1 <=
+                       kk_offset + dimensions_per_level);
+                   assert(i + 2 * loop_preload_offset >= kk_offset + dimensions_per_level);
+
+#pragma unroll
+                   for (unsigned int ii = 2 * loop_preload_offset - loop_preload_count + 1;
+                       ii <= 2 * loop_preload_offset; ++ii)
+                   {
+                       if (i + ii == kk_offset + dimensions_per_level)
+                       {
+#pragma unroll
+                           for (unsigned int j = 0; j < ii; ++j)
+                           {
+                               if (j + loop_preload_offset < ii)
+                               {
+                                   preloaded_parent_center_partsums[(j + loop_preload_offset) % loop_preload_count] =
+                                       buffer.get_center_partsum(level - 1, parent_index, i + j + loop_preload_offset);
+                               }
+                               assert(preloaded_parent_center_partsums[j % loop_preload_count] ==
+                                   buffer.get_center_partsum(level - 1, parent_index, i + j));
+                               center_partsum = preloaded_parent_center_partsums[j % loop_preload_count] +
+                                   calc_center_partsum_delta<levels, dimensions_per_level>(level, new_index,
+                                       i + j, x, mu);
+                               buffer.set_center_partsum(level, new_index, i + j, center_partsum);
+                           }
+                       }
+                   }
+
+                   buffer.init_enumeration(level, new_index);
+               }
+           }
+
+           /**
+           * Generates more children for the last group.size() nodes on the given level and adds them to the
+           * buffer. The subtree enumerations of the processed nodes are accordingly updated so that they will
+           * only yield new children.
+           *
+           * Synchronization: count(level) write(level) add(level + 1)
+           */
+           template <typename SyncGroup>
+           __device__ __host__ void generate_children(
+               SyncGroup& group
+           ) {
+               assert(level < levels - 1);
+               assert(level >= 0);
+
+               const unsigned int node_count = buffer.get_node_count(level);
+               const unsigned int index = node_count - min(node_count, group.size()) + group.thread_rank();
+               const bool active = index < node_count;
+
+               unsigned int max_paths = opts.max_subtree_paths;
+               unsigned int existing_nodes = buffer.get_node_count(level + 1);
+
+               ensure_enumeration_initialized(group, level);
+
+               group.sync();
+
+               if (active)
+               {
+                   CudaEnumeration<dimensions_per_level> enumeration = buffer.get_enumeration(
+                       level, index, mu.block(offset_kk(), offset_kk()), rdiag, pruning_bounds);
+
+                   bool is_done = enumeration.template is_enumeration_done<dimensions_per_level - 1>();
+
+                   if (!is_done)
+                   {
+                       typedef AddToTreeCallback<levels, dimensions_per_level, max_nodes_per_level> CallbackType;
+                       CallbackType callback = { static_cast<unsigned int>(level + 1), index, mu, buffer };
+                       PerfCounter offset_counter = counter.offset_level(offset_kk());
+                       CoefficientIterator iter;
+                       enumeration.enumerate_recursive(
+                           callback, max_paths, offset_counter, kk_marker<dimensions_per_level - 1>(), iter);
+
+                       buffer.set_enumeration(level, index, enumeration);
+                   }
+               }
+           }
+
+           /**
+           * Searches the subtrees of the last group.size() nodes on the last tree level, possibly finding a
+           * new nonzero shortest vector. The subtree enumerations of the processed nodes are accordingly
+           * updated so that they will only yield new vectors.
+           */
+           template <typename SyncGroup, typename eval_sol_fn>
+               __device__ __host__ void inline consume_leaves(
+                   SyncGroup& group, eval_sol_fn& process_sol
+           ) {
+               const unsigned int level = levels - 1;
+               const unsigned int node_count = buffer.get_node_count(level);
+               const unsigned int index = node_count - min(node_count, group.size()) + group.thread_rank();
+               const bool active = index < node_count;
+               unsigned int max_paths = opts.max_subtree_paths;
+
+               ensure_enumeration_initialized(group, level);
+
+               group.sync();
+
+               if (active)
+               {
+                   CudaEnumeration<dimensions_per_level> enumeration =
+                       buffer.get_enumeration(level, index, mu, rdiag, pruning_bounds);
+
+                   typedef ProcessLeafCallback<eval_sol_fn, levels, dimensions_per_level, max_nodes_per_level>
+                       CallbackT;
+                   CallbackT callback = { level + 1, index,        start_point_dim,         process_sol,
+                                          mu,        start_points, buffer };
+                   CoefficientIterator iter;
+                   enumeration.enumerate_recursive(
+                       callback, max_paths, counter, kk_marker<dimensions_per_level - 1>(), iter);
+
+                   buffer.set_enumeration(level, index, enumeration);
+               }
+           }
+               
+           /**
+            * Calculates the count of nodes among the last roup.size() nodes on the given level whose subtrees
+            * have nodes not exceeding the radius limit.
+            */
+           template <typename SyncGroup>
+           __device__ __host__ inline unsigned int get_done_node_count(
+               SyncGroup& group
+           ) {
+               const unsigned int node_count = buffer.get_node_count(level);
+               const unsigned int index = node_count - min(node_count, group.size()) + group.thread_rank();
+               const bool active = index < node_count;
+
+               bool is_done = true;
+               if (active)
+               {
+                   is_done = buffer
+                       .get_enumeration(level, index, mu.block(offset_kk(), offset_kk()), rdiag, pruning_bounds)
+                       .template is_enumeration_done<dimensions_per_level - 1>();
+   
+               }
+               return group.count(is_done);
+           }
+
+
+           /**
+            * Removes all nodes among the last group.size() nodes on the given level whose subtrees have nodes
+            * with partdist exceeding the radius limit. Be careful as the buffer can still have nodes
+            * referencing such a done node as a parent node, since the enumeration data is updated when
+            * children are generated, not when children are fully processed.
+            */
+           template <typename SyncGroup>
+           __device__ __host__ inline void remove_done_nodes(
+                   SyncGroup& group
+           ) {
+               const unsigned int node_count = buffer.get_node_count(level);
+               const unsigned int active_thread_count = min(node_count, group.size());
+               const unsigned int index = node_count - active_thread_count + group.thread_rank();
+
+               bool is_done = buffer
+                   .get_enumeration(level, index, mu.block(offset_kk(), offset_kk()), rdiag, pruning_bounds)
+                   .template is_enumeration_done<dimensions_per_level - 1>();
+
+               group.sync();
+
+               buffer.filter_nodes(group, level, index, !is_done, active_thread_count);
+           }
+
+           /**
+            * Generates children from the last group.size() nodes on level and adds them to the buffer, until
+            * either the children buffer is full or most of these nodes are done.
+            */
+           template <typename SyncGroup>
+           __device__ __host__ inline void process_inner_level(
+               SyncGroup& group
+           ) {
+               const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
+
+               while (true)
+               {
+                   generate_children(group);
+
+                   group.sync();
+
+                   const unsigned int done_node_count = get_done_node_count(group);
+
+                   group.sync();
+
+                   if (CUENUM_TRACE && thread_id() == 0)
+                   {
+                       printf("Thread 0: Worked on level %d, next level points are %d, %d nodes of current working pool (%d) are done\n",
+                           level, buffer.get_node_count(level + 1), done_node_count, active_thread_count);
+                   }
+
+                   if (buffer.get_node_count(level + 1) >= opts.max_children_buffer_size)
+                   {
+                       break;
+                   }
+                   else if (done_node_count >= active_thread_count * (1 - opts.min_active_parents_percentage))
+                   {
+                       break;
+                   }
+                   group.sync();
+               }
+           }
+
+           template <typename SyncGroup, typename eval_sol_fn>
+           __device__ __host__ inline void process_leaf_level(
+                   SyncGroup& group, eval_sol_fn& process_sol
+           ) {
+               const unsigned int level = levels - 1;
+               while (buffer.get_node_count(level) > 0)
+               {
+                   consume_leaves(group, process_sol);
+                   remove_done_nodes(group);
+                   group.sync();
+               }
+           }
+
+           /**
+            * Removes finished nodes from the parent level of the given level. Does nothing when called on the
+            * root.
+            */
+           template <typename SyncGroup>
+           __device__ __host__ inline void cleanup_parent_level(
+               SyncGroup& group
+           ) {
+               if (level > 0)
+               {
+                   group.sync();
+
+                   level -= 1;
+                   remove_done_nodes(group);
+                   level += 1;
+
+                   group.sync();
+
+                   if (CUENUM_TRACE && thread_id() == 0)
+                   {
+                       printf("Thread 0: Cleaned up level %d, has now %d nodes\n", level - 1, buffer.get_node_count(level - 1));
+                   }
+
+                   group.sync();
+               }
+           }
+
+           __device__ __host__ inline bool has_nodes() {
+               return buffer.get_node_count(level) > 0;
+           }
+
+           __device__ __host__ inline bool is_inner_level() {
+               return level + 1 < levels;
+           }
+       };
+   
    
        template <typename SyncGroup, typename eval_sol_fn, unsigned int levels,
            unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
-           __device__ __host__ inline void process_leaf_level(
-               SyncGroup& group,
-               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer, Matrix mu,
-               const enumf* rdiag, const enumf* pruning_bounds, PerfCounter node_counter,
-               eval_sol_fn& process_sol, const enumi* start_points, unsigned int start_point_dim,
-               StrategyOpts opts)
-       {
-           const unsigned int level = levels - 1;
-           while (buffer.get_node_count(level) > 0)
+       __device__ __host__ inline void
+       clear_level(SyncGroup& group, eval_sol_fn& evaluator,
+           TreeLevelEnumerator<levels, dimensions_per_level, max_nodes_per_level>& enumerator
+       ) {
+           enumerator.level = 0;
+           while (enumerator.level >= 0)
            {
-               consume_leaves(group, buffer, mu, rdiag, pruning_bounds, opts.max_subtree_paths,
-                   process_sol, start_points, start_point_dim, node_counter);
-               remove_done_nodes(group, buffer, level, mu, rdiag, pruning_bounds);
-               group.sync();
-           }
-       }
-   
-       /**
-        * Removes finished nodes from the parent level of the given level. Does nothing when called on the
-        * root.
-        */
-       template <typename SyncGroup, typename SubtreeBuffer>
-           __device__ __host__ inline void cleanup_parent_level(
-               SyncGroup& group,
-               SubtreeBuffer buffer, int level,
-               Matrix mu, const enumf* rdiag, const enumf* pruning_bounds)
-       {
-           if (level > 0)
-           {
-               group.sync();
-   
-               remove_done_nodes(group, buffer, level - 1, mu, rdiag, pruning_bounds);
-   
-               group.sync();
-   
-               if (CUENUM_TRACE && thread_id() == 0)
+               if (enumerator.is_inner_level())
                {
-                   printf("Thread 0: Cleaned up level %d, has now %d nodes\n", level - 1, buffer.get_node_count(level - 1));
-               }
-   
-               group.sync();
-           }
-       }
-   
-       template <typename SyncGroup, unsigned int block_size, typename eval_sol_fn, unsigned int levels,
-           unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
-           __device__ __host__ inline void
-           clear_level(SyncGroup& group, unsigned int* shared_counter,
-               SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer,
-               int level, Matrix mu, const enumf* rdiag, const enumf* pruning_bounds,
-               eval_sol_fn& process_sol, const enumi* start_points, unsigned int start_point_dim,
-               StrategyOpts opts, PerfCounter node_counter)
-       {
-           while (level >= 0)
-           {
-               if (level + 1 < levels)
-               {
-                   if (buffer.get_node_count(level) > 0)
+                   if (enumerator.has_nodes() > 0)
                    {
-                       process_inner_level(group, shared_counter, buffer, level, mu, rdiag,
-                           pruning_bounds, node_counter, opts);
-                       ++level;
+                       enumerator.process_inner_level(group);
+                       ++enumerator.level;
                    }
                    else
                    {
-                       cleanup_parent_level(group, buffer, level, mu, rdiag,
-                           pruning_bounds);
-                       --level;
+                       enumerator.cleanup_parent_level(group);
+                       --enumerator.level;
                    }
                }
                else
                {
-                   process_leaf_level(group, buffer, mu, rdiag, pruning_bounds,
-                       node_counter, process_sol, start_points, start_point_dim, opts);
-                   cleanup_parent_level(group, buffer, level, mu, rdiag, pruning_bounds);
-                   --level;
+                   enumerator.process_leaf_level(group, evaluator);
+                   enumerator.cleanup_parent_level(group);
+                   --enumerator.level;
                }
                group.sync();
            }
@@ -1046,15 +1029,13 @@
            typedef SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> SubtreeBuffer;
            typedef PointStreamEvaluator<enumerate_point_stream_buffer_size> Evaluator;
    
-           constexpr unsigned int block_size = enumerate_block_size;
            constexpr unsigned int dimensions = dimensions_per_level * levels;
            constexpr unsigned int group_count_per_block = enumerate_block_size / enumerate_cooperative_group_size;
    
            constexpr unsigned int mu_shared_memory_size = dimensions * dimensions * sizeof(enumf);
            constexpr unsigned int rdiag_shared_memory_size = dimensions * sizeof(enumf);
-   
-           constexpr unsigned int shared_mem_size = group_count_per_block * sizeof(unsigned int) + sizeof(unsigned int) +
-               mu_shared_memory_size + rdiag_shared_memory_size;
+           constexpr unsigned int point_stream_shared_memory_size = group_count_per_block * sizeof(unsigned int);
+           constexpr unsigned int shared_mem_size = point_stream_shared_memory_size + mu_shared_memory_size + rdiag_shared_memory_size;
    
            __shared__ unsigned char shared_mem[shared_mem_size];
    
@@ -1063,13 +1044,11 @@
    
            enumf* mu_shared = reinterpret_cast<enumf*>(shared_mem);
            enumf* rdiag_shared = reinterpret_cast<enumf*>(shared_mem + mu_shared_memory_size);
-   
-           unsigned int* group_shared_counter =
-               reinterpret_cast<unsigned int*>(shared_mem + group.group_index_in_block() * sizeof(unsigned int) +
-                   mu_shared_memory_size + rdiag_shared_memory_size);
-           unsigned int* point_stream_counter =
-               reinterpret_cast<unsigned int*>(shared_mem + group.group_index_in_block() * sizeof(unsigned int) +
-                   mu_shared_memory_size + rdiag_shared_memory_size);
+           unsigned int* point_stream_counter = reinterpret_cast<unsigned int*>(
+               shared_mem + group.group_index_in_block() * sizeof(unsigned int) +
+               mu_shared_memory_size + rdiag_shared_memory_size
+           );
+           unsigned int* group_shared_counter = point_stream_counter;
    
            const unsigned int ldmu = dimensions + start_point_dim;
            for (unsigned int i = threadIdx.x; i < dimensions * dimensions; i += blockDim.x)
@@ -1081,15 +1060,23 @@
                rdiag_shared[i] = rdiag[i];
            }
            __syncthreads();
-           Matrix mu(mu_shared, dimensions);
-   
-           PerfCounter node_counter(perf_counter_memory);
-   
-           Evaluator process_sol(point_stream_memory + blockIdx.x * Evaluator::memory_size_in_bytes(dimensions + start_point_dim), point_stream_counter);
-   
+
            assert(opts.initial_nodes_per_group <= group.size());
-   
+           Matrix mu(mu_shared, dimensions);
+           PerfCounter node_counter(perf_counter_memory);
            SubtreeBuffer buffer(buffer_memory + group.group_index() * SubtreeBuffer::memory_size_in_bytes);
+
+           Evaluator process_sol(point_stream_memory + blockIdx.x * Evaluator::memory_size_in_bytes(dimensions + start_point_dim), point_stream_counter);
+           TreeLevelEnumerator<levels, dimensions_per_level, max_nodes_per_level> enumerator(
+               buffer,
+               mu,
+               rdiag_shared,
+               node_counter,
+               pruning_bounds,
+               start_points,
+               start_point_dim,
+               opts.tree_clear_opts
+           );
    
            while (true)
            {
@@ -1145,10 +1132,8 @@
    
                group.sync();
    
-               clear_level<SyncGroup, block_size, Evaluator, levels, dimensions_per_level, max_nodes_per_level>(
-                   group, group_shared_counter, buffer, 0, mu, rdiag_shared,
-                   pruning_bounds, process_sol, start_points, start_point_dim,
-                   opts.tree_clear_opts, node_counter
+               clear_level<SyncGroup, Evaluator, levels, dimensions_per_level, max_nodes_per_level>(
+                   group, process_sol, enumerator
                );
            }
        }

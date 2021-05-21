@@ -3,7 +3,7 @@
 namespace cuenum {
 
     template <unsigned int levels, unsigned int dimensions_per_level, unsigned int max_nodes_per_level, bool print_status = true>
-    std::vector<uint64_t> enumerate_cpu(const enumf* mu_ptr, const enumf* rdiag, const enumi* start_points,
+    ::std::vector<uint64_t> enumerate_cpu(const enumf* mu_ptr, const enumf* rdiag, const enumi* start_points,
         unsigned int start_point_dim, unsigned int start_point_count, const enumf* pruning, enumf initial_radius,
         process_sol_fn process_sol,
         Opts<levels, dimensions_per_level, max_nodes_per_level> opts)

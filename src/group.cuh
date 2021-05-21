@@ -200,7 +200,9 @@ class ThreadGroupWarp {
 
 public:
 
-    __device__ ThreadGroupWarp(cooperative_groups::thread_block block_group) : cg(cooperative_groups::tiled_partition<32>(block_group)), prefix_counter() {}
+    __device__ ThreadGroupWarp(cooperative_groups::thread_block block_group) 
+        : cg(cooperative_groups::tiled_partition<32>(block_group)), prefix_counter()
+    {}
 
     __device__ inline void sync() {
         cg.sync();
@@ -210,7 +212,7 @@ public:
         return cg.thread_rank();
     }
 
-    __device__ __host__ constexpr inline unsigned int size() {
+    __device__ __host__ inline unsigned int size() {
 #ifdef __CUDA_ARCH__
         assert(cg.size() == 32);
 #endif
@@ -232,6 +234,12 @@ public:
     __device__ inline unsigned int prefix_count(bool predicate, unsigned int& total_len)
     {
         return prefix_counter.prefix_count(cg, predicate, total_len);
+    }
+
+    __device__ inline unsigned int count(bool predicate) {
+        unsigned int result = 0;
+        prefix_count(predicate, result);
+        return result;
     }
 
     __device__ inline bool all(bool predicate)

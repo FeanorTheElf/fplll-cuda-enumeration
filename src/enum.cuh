@@ -814,7 +814,6 @@
                new_index < buffer.get_node_count(level); new_index += group.size())
            {
                unsigned int kk_offset = (levels - level - 1) * dimensions_per_level;
-               unsigned int center_i = kk_offset + dimensions_per_level - 1;
 
                const unsigned int parent_index = buffer.get_parent_index(level, new_index);
                enumi x[dimensions_per_level];

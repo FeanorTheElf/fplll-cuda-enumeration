@@ -120,7 +120,7 @@ public:
     }
 };
 
-template <unsigned int block_size, typename PG> class PrefixCounter<cooperative_groups::thread_block_tile<32, PG>, block_size>
+template <unsigned int block_size> class PrefixCounter<cooperative_groups::thread_block_tile<32>, block_size>
 {
 
 public:
@@ -132,7 +132,7 @@ public:
 
   constexpr static unsigned int shared_mem_size_in_bytes = 0;
 
-  __device__ inline unsigned int prefix_count(cooperative_groups::thread_block_tile<32, PG> &group,
+  __device__ inline unsigned int prefix_count(cooperative_groups::thread_block_tile<32> &group,
                                               bool predicate, unsigned int &total_len)
   {
     assert(blockDim.x == block_size);
@@ -154,23 +154,23 @@ public:
 
     __device__ __host__ inline void sync() {}
 
-    __device__ __host__ inline unsigned int thread_rank() {
+    __device__ __host__ inline unsigned int thread_rank() const {
         return 0;
     }
 
-    __device__ __host__ inline unsigned int size() {
+    __device__ __host__ inline unsigned int size() const {
         return 1;
     }
 
-    __device__ __host__ inline unsigned int group_index() {
+    __device__ __host__ inline unsigned int group_index() const {
         return 0;
     }
 
-    __device__ inline unsigned int group_index_in_block() {
+    __device__ inline unsigned int group_index_in_block() const {
         return 0;
     }
 
-    __device__ __host__ constexpr inline unsigned int group_count(unsigned int block_count) {
+    __device__ __host__ constexpr inline unsigned int group_count(unsigned int block_count) const {
         return 1;
     }
 
@@ -195,8 +195,8 @@ public:
 template<unsigned int block_size>
 class ThreadGroupWarp {
 
-    cooperative_groups::thread_block_tile<32, cooperative_groups::thread_block> cg;
-    PrefixCounter<cooperative_groups::thread_block_tile<32, cooperative_groups::thread_block>, block_size> prefix_counter;
+    cooperative_groups::thread_block_tile<32> cg;
+    PrefixCounter<cooperative_groups::thread_block_tile<32>, block_size> prefix_counter;
 
 public:
 
@@ -208,26 +208,26 @@ public:
         cg.sync();
     }
 
-    __device__ inline unsigned int thread_rank() {
+    __device__ inline unsigned int thread_rank() const {
         return cg.thread_rank();
     }
 
-    __device__ __host__ inline unsigned int size() {
+    __device__ __host__ inline unsigned int size() const {
 #ifdef __CUDA_ARCH__
         assert(cg.size() == 32);
 #endif
         return 32;
     }
 
-    __device__ inline unsigned int group_index() {
+    __device__ inline unsigned int group_index() const {
         return threadIdx.x / 32 + blockIdx.x * (blockDim.x / 32);
     }
 
-    __device__ inline unsigned int group_index_in_block() {
+    __device__ inline unsigned int group_index_in_block() const {
         return threadIdx.x / 32;
     }
 
-    __device__ __host__ constexpr inline unsigned int group_count(unsigned int block_count) {
+    __device__ __host__ constexpr inline unsigned int group_count(unsigned int block_count) const {
         return block_count * block_size / size();
     }
 

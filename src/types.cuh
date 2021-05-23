@@ -62,9 +62,9 @@ struct PerfCounter
   }
 };
 
-__device__ unsigned long long perf[2] = { 0 };
+__device__ uint64_t perf[2] = { 0 };
 
-__device__ __host__ inline unsigned long long from() {
+__device__ __host__ inline uint64_t from() {
 #ifdef __CUDA_ARCH__
     return clock64();
 #else
@@ -72,24 +72,24 @@ __device__ __host__ inline unsigned long long from() {
 #endif
 }
 
-__device__ __host__ inline void to(unsigned long long x) {
+__device__ __host__ inline void to(uint64_t x) {
 #ifdef __CUDA_ARCH__
-    atomicAdd(&perf[0], clock64() - x);
+    atomic_add(&perf[0], clock64() - x);
 #endif
 }
 
 __host__ inline void reset_profiling_counter() {
-    const unsigned long long zero[2] = { 0, 0 };
-    cudaMemcpyToSymbol(perf, &zero, 2 * sizeof(unsigned long long), 0, cudaMemcpyHostToDevice);
+    const uint64_t zero[2] = { 0, 0 };
+    cudaMemcpyToSymbol(perf, &zero, 2 * sizeof(uint64_t), 0, cudaMemcpyHostToDevice);
 }
 
 __host__ inline void print_profiling_counter() {
-    unsigned long long hperf[2];
-    cudaMemcpyFromSymbol(&hperf, perf, 2 * sizeof(unsigned long long), 0, cudaMemcpyDeviceToHost);
+    uint64_t hperf[2];
+    cudaMemcpyFromSymbol(&hperf, perf, 2 * sizeof(uint64_t), 0, cudaMemcpyDeviceToHost);
     std::cout << "profiling counter " << (hperf[0] / 1e9) << " Gcycles, " << (hperf[1] / 1e9) << " Gcycles" << std::endl;
 }
 
-#define FROM(x) unsigned long long x = from();
+#define FROM(x) uint64_t x = from();
 #define TO(x) to(x);
 
 __device__ __host__ inline void profile_active_thread_percentage() {

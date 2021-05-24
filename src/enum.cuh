@@ -392,6 +392,7 @@
                const unsigned int new_index = new_offset + open_node_count()[tree_level] - active_thread_count;
    
                enumi coefficients_tmp[dimensions_per_level];
+               enumi enumeration_x_tmp[dimensions_per_level];
                enumf center_partsum_tmp[dimensions];
                enumf partdist_tmp;
                unsigned int parent_index_tmp;
@@ -401,9 +402,12 @@
                    parent_index_tmp = parent_indices()[tree_level * max_nodes_per_level + old_index];
                    for (unsigned int i = 0; i < dimensions_per_level; ++i)
                    {
-                       coefficients_tmp[i] =
+                        enumeration_x_tmp[i] =
                            enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                            i * max_nodes_per_level + old_index];
+                        coefficients_tmp[i] =
+                            coefficients()[tree_level * dimensions_per_level * max_nodes_per_level +
+                            i * max_nodes_per_level + old_index];
                    }
                    for (unsigned int i = 0; i < dimensions; ++i)
                    {
@@ -421,6 +425,8 @@
                    for (unsigned int i = 0; i < dimensions_per_level; ++i)
                    {
                        enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
+                           i * max_nodes_per_level + new_index] = enumeration_x_tmp[i];
+                        coefficients()[tree_level * dimensions_per_level * max_nodes_per_level +
                            i * max_nodes_per_level + new_index] = coefficients_tmp[i];
                    }
                    for (unsigned int i = 0; i < dimensions; ++i)
@@ -458,8 +464,7 @@
            ProcessLeafCallback<eval_sol_fn, levels, dimensions_per_level, max_nodes_per_level>::operator()(
                const enumi* x, enumf squared_norm)
        {
-           if (squared_norm == 0)
-           {
+           if (squared_norm == 0) {
                return;
            }
            const unsigned int total_point_dimension = dimensions_per_level * levels + start_point_dim;
@@ -490,7 +495,6 @@
        {
            unsigned int level;
            unsigned int parent_index;
-           Matrix mu;
            SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> buffer;
    
            __device__ __host__ void operator()(const enumi* x, enumf squared_norm);
@@ -502,7 +506,6 @@
                enumf squared_norm)
        {
            assert(level > 0);
-   
            const unsigned int new_index = buffer.add_node(level, parent_index);
            for (unsigned int j = 0; j < dimensions_per_level; ++j)
            {
@@ -626,7 +629,7 @@
                    if (!is_done)
                    {
                        typedef AddToTreeCallback<levels, dimensions_per_level, max_nodes_per_level> CallbackType;
-                       CallbackType callback = { static_cast<unsigned int>(level + 1), index, mu, buffer };
+                       CallbackType callback = { static_cast<unsigned int>(level + 1), index, buffer };
                        PerfCounter offset_counter = counter.offset_level(offset_kk());
                        CoefficientIterator iter;
                        enumeration.enumerate_recursive(
@@ -1130,6 +1133,7 @@
                        assert(partdist >= 0);
                    }
                    buffer.set_partdist(0, index, partdist);
+                   assert(start_point_index > 0 || partdist == 0);
                    buffer.init_enumeration(0, index);
                }
                if (CUENUM_TRACE && thread_id() == 0)

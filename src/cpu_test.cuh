@@ -1,12 +1,13 @@
-﻿#include "enum.cuh"
+#include "enum.cuh"
 
-namespace cuenum {
+namespace cuenum
+{
 
     template <unsigned int levels, unsigned int dimensions_per_level, unsigned int max_nodes_per_level, bool print_status = true>
-    ::std::vector<uint64_t> enumerate_cpu(const enumf* mu_ptr, const enumf* rdiag, const enumi* start_points,
-        unsigned int start_point_dim, unsigned int start_point_count, const enumf* pruning, enumf initial_radius,
-        process_sol_fn process_sol,
-        Opts<levels, dimensions_per_level, max_nodes_per_level> opts)
+    ::std::vector<uint64_t> enumerate_cpu(const enumf *mu_ptr, const enumf *rdiag, const enumi *start_points,
+                                          unsigned int start_point_dim, unsigned int start_point_count, const enumf *pruning, enumf initial_radius,
+                                          process_sol_fn process_sol,
+                                          Opts<levels, dimensions_per_level, max_nodes_per_level> opts)
     {
         typedef ThreadGroupSingleThread SyncGroup;
         typedef SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> SubtreeBuffer;
@@ -23,17 +24,19 @@ namespace cuenum {
         std::unique_ptr<enumf[]> pruning_bounds(new enumf[point_dimension]);
 
         std::unique_ptr<enumi[]> solution_point(new enumi[point_dimension]);
-        FnWrapper<enumi, unsigned int, enumf, unsigned int> evaluator([&solution_point, &process_sol, &pruning_bounds, &pruning]
-        (enumi x, unsigned int coordinate, enumf norm_square, unsigned int point_dimension) {
+        FnWrapper<enumi, unsigned int, enumf, unsigned int> evaluator([&solution_point, &process_sol, &pruning_bounds, &pruning](enumi x, unsigned int coordinate, enumf norm_square, unsigned int point_dimension) {
             solution_point[coordinate] = x;
-            if (coordinate == point_dimension - 1) {
+            if (coordinate == point_dimension - 1)
+            {
                 double bound = process_sol(norm_square, solution_point.get());
-                for (unsigned int i = 0; i < point_dimension; ++i) {
+                for (unsigned int i = 0; i < point_dimension; ++i)
+                {
                     pruning_bounds[i] = bound * pruning[i];
                 }
             }
         });
-        for (unsigned int i = 0; i < point_dimension; ++i) {
+        for (unsigned int i = 0; i < point_dimension; ++i)
+        {
             pruning_bounds[i] = initial_radius * initial_radius * pruning[i];
         }
 
@@ -66,7 +69,7 @@ namespace cuenum {
                 group.thread_rank() < opts.initial_nodes_per_group && start_point_index < start_point_count;
             if (active)
             {
-                const enumi* start_point = &start_points[start_point_index * start_point_dim];
+                const enumi *start_point = &start_points[start_point_index * start_point_dim];
                 const unsigned int index = buffer.add_node(0, start_point_index);
                 for (unsigned int i = 0; i < dimensions; ++i)
                 {
@@ -100,8 +103,8 @@ namespace cuenum {
             group.sync();
 
             clear_level(group, &counter, buffer, 0, mu, rdiag,
-                pruning_bounds.get(), evaluator, start_points, start_point_dim,
-                opts.tree_clear_opts, node_counter);
+                        pruning_bounds.get(), evaluator, start_points, start_point_dim,
+                        opts.tree_clear_opts, node_counter);
         }
 
         return result;

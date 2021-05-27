@@ -5,5 +5,8 @@
     "spellright.documentTypes": [
         "markdown",
         "latex"
-    ]
+    ],
+    "files.associations": {
+        "array": "cpp"
+    }
 }

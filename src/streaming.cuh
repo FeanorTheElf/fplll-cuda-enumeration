@@ -25,6 +25,8 @@
 #include <cstring>
 #include <vector>
 #include <iostream>
+#include <algorithm>
+#include <iterator>
 
 #include "atomic.h"
 #include "memory.h"
@@ -242,8 +244,11 @@ public:
 	{
 		check(cudaMemcpyAsync(host_searched_nodes.get(), device_searched_nodes, point_dimension * sizeof(uint64_t), cudaMemcpyDeviceToHost, stream.get()));
 		check(cudaStreamSynchronize(stream.get()));
-		std::cout << "Currently searched " << std::accumulate(host_searched_nodes.get(), host_searched_nodes.get() + point_dimension, static_cast<uint64_t>(0))
-				  << " tree nodes" << std::endl;
+		std::cout << "Currently searched ";
+		for (auto it = host_searched_nodes.get(); it != host_searched_nodes.get() + point_dimension; ++it) {
+			std::cout << *it << ", ";
+		}
+		std::cout << std::endl;
 	}
 
 	__host__ inline void wait_for_event(cudaEvent_t event)

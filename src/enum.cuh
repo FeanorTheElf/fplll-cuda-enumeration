@@ -165,7 +165,7 @@ namespace cuenum
 
         __device__ __host__ inline CudaEnumeration<dimensions_per_level>
         get_enumeration(unsigned int tree_level, unsigned int index, Matrix mu_block, const enumf *rdiag,
-                        const enumf *pruning_bounds)
+                        const volatile enumf *pruning_bounds)
         {
             assert(tree_level < levels);
             assert(index < max_nodes_per_level);
@@ -238,7 +238,7 @@ namespace cuenum
             const unsigned int kk_offset = (levels - tree_level - 1) * dimensions_per_level;
             const enumf center = get_center_partsum(tree_level, index, kk_offset + dimensions_per_level - 1);
             assert(!isnan(center));
-            assert !(!isnan(get_partdist(tree_level, index)));
+            assert(!isnan(get_partdist(tree_level, index)));
             enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                             (dimensions_per_level - 1) * max_nodes_per_level + index] =
                 static_cast<enumi>(round(center));
@@ -561,7 +561,7 @@ namespace cuenum
         const Matrix &mu;
         const enumf *rdiag;
         PerfCounter &counter;
-        const enumf *pruning_bounds;
+        const volatile enumf *pruning_bounds;
         const enumi *start_points;
         const unsigned int start_point_dim;
         const StrategyOpts &opts;
@@ -574,7 +574,7 @@ namespace cuenum
             const Matrix &mu,
             const enumf *rdiag,
             PerfCounter &counter,
-            const enumf *pruning_bounds,
+            const volatile enumf *pruning_bounds,
             const enumi *start_points,
             unsigned int start_point_dim,
             const StrategyOpts &opts)
@@ -695,7 +695,7 @@ namespace cuenum
             const unsigned int index = node_count - min(node_count, group.size()) + group.thread_rank();
             const bool active = index < node_count;
 
-            bool is_done = true;
+            bool is_done = false;
             if (active)
             {
                 is_done = buffer
@@ -823,7 +823,7 @@ namespace cuenum
         for (unsigned int new_index = already_calculated_node_count + group.thread_rank();
              new_index < buffer.get_node_count(level); new_index += group.size())
         {
-            unsigned int kk_offset = kk_offset();
+            unsigned int kk_offset = this->kk_offset();
 
             const unsigned int parent_index = buffer.get_parent_index(level, new_index);
             enumi x[dimensions_per_level];
@@ -1047,7 +1047,7 @@ namespace cuenum
     __global__ void __launch_bounds__(enumerate_block_size, 4) enumerate_kernel(unsigned char *buffer_memory, const enumi *start_points,
                                                                                 unsigned int *processed_start_point_counter, unsigned int start_point_count,
                                                                                 unsigned int start_point_dim, const enumf *mu_ptr, const enumf *rdiag,
-                                                                                const enumf *pruning_bounds, uint64_t *perf_counter_memory,
+                                                                                const volatile enumf *pruning_bounds, uint64_t *perf_counter_memory,
                                                                                 unsigned char *point_stream_memory,
                                                                                 Opts<levels, dimensions_per_level, max_nodes_per_level> opts)
     {
@@ -1248,7 +1248,7 @@ namespace cuenum
         enumerate_kernel<<<dim3(grid_size), dim3(enumerate_block_size), 0, exec_stream.get()>>>(
             buffer_mem.get(), device_start_points.get(), processed_start_point_count.get(),
             start_point_count, start_point_dim, device_mu.get(), device_rdiag.get(), pruning_bounds.get(),
-            node_counter.get() + start_point_dim, point_stream_memory.get(), opts);
+            node_counter.get(), point_stream_memory.get(), opts);
 
         check(cudaEventRecord(event.get(), exec_stream.get()));
 
@@ -1264,12 +1264,13 @@ namespace cuenum
         }
         stream.wait_for_event(event.get());
         stream.query_new_points<process_sol_fn, print_status>(process_sol);
+		stream.print_currently_searched_nodes();
 
         check(cudaDeviceSynchronize());
         check(cudaGetLastError());
 
         std::array<uint64_t, tree_dimensions> searched_nodes;
-        check(cudaMemcpy(&searched_nodes[0], node_counter.get() + start_point_dim, tree_dimensions * sizeof(uint64_t),
+        check(cudaMemcpy(&searched_nodes[0], node_counter.get(), tree_dimensions * sizeof(uint64_t),
                          cudaMemcpyDeviceToHost));
 
         if (print_status)

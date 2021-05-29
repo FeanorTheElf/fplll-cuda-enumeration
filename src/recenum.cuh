@@ -63,13 +63,13 @@ namespace cuenum
 	private:
 		enumi x[maxdim];
 		enumf partdist[maxdim];
-		// different to base enumeration of fplll, the second index is shifted
+		// different to base enumeration of fplll, the second index is shifted;
 		// _[i][j] contains inner product of i-th orthogonalized basis vector with
 		// B * (0, ..., 0, x[j + 1], ... x[n])
 		enumf center_partsums[maxdim][maxdim];
 		enumf center[maxdim];
 
-		const enumf *pruning_bounds;
+		const volatile enumf *pruning_bounds;
 		Matrix mu;
 		const enumf *rdiag;
 
@@ -80,8 +80,8 @@ namespace cuenum
    * Initializes this enumeration object to enumerate points in the lattice spanned by the enum_dim x enum_dim lower-right
    * submatrix of mu, around the origin.
    */
-		__device__ __host__ CudaEnumeration(Matrix mu, const enumf *rdiag, const enumf *initial_pruning_bounds, unsigned int enum_dim)
-			: mu(mu), rdiag(rdiag), pruning_bounds(initial_pruning_bounds)
+		__device__ __host__ CudaEnumeration(Matrix mu, const enumf *rdiag, const volatile enumf *pruning_bounds, unsigned int enum_dim)
+			: mu(mu), rdiag(rdiag), pruning_bounds(pruning_bounds)
 		{
 			for (unsigned int i = 0; i < maxdim; ++i)
 			{
@@ -241,7 +241,6 @@ namespace cuenum
 			x[kk] = NAN;
 			return true;
 		}
-
 		callback(x, newdist);
 
 		while (true)

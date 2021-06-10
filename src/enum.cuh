@@ -587,7 +587,7 @@ namespace cuenum
 
         template <typename SyncGroup>
         __device__ __host__ void ensure_enumeration_initialized(
-            SyncGroup &group, int target_level);
+            SyncGroup &group);
 
         /**
             * Initializes newly generated nodes with all information necessary to perform subtree enumeration,
@@ -622,7 +622,7 @@ namespace cuenum
             unsigned int max_paths = opts.max_subtree_paths;
             unsigned int existing_nodes = buffer.get_node_count(level + 1);
 
-            ensure_enumeration_initialized(group, level);
+            ensure_enumeration_initialized(group);
 
             group.sync();
 
@@ -662,7 +662,7 @@ namespace cuenum
             const bool active = index < node_count;
             unsigned int max_paths = opts.max_subtree_paths;
 
-            ensure_enumeration_initialized(group, level);
+            ensure_enumeration_initialized(group);
 
             group.sync();
 
@@ -899,9 +899,9 @@ namespace cuenum
     template <unsigned int levels, unsigned int dimensions_per_level, unsigned int max_nodes_per_level>
     template <typename SyncGroup>
     __device__ __host__ void TreeLevelEnumerator<levels, dimensions_per_level, max_nodes_per_level>::ensure_enumeration_initialized(
-        SyncGroup &group, int target_level)
+        SyncGroup &group)
     {
-        const unsigned int first_required_partsum_index = (levels - target_level - 1) * dimensions_per_level;
+        const unsigned int first_required_partsum_index = (levels - level - 1) * dimensions_per_level;
         unsigned int current_level = level;
 
         bool is_initialized;
@@ -915,7 +915,7 @@ namespace cuenum
             const unsigned int active_thread_count = min(node_count, group.size());
             const unsigned int index = node_count - active_thread_count + group.thread_rank();
 
-            is_initialized = group.thread_rank() >= active_thread_count || buffer.are_partsums_initialized(current_level, index, target_level);
+            is_initialized = group.thread_rank() >= active_thread_count || buffer.are_partsums_initialized(current_level, index, level);
             all_initialized = group.all(is_initialized);
 
             if (current_level == level) {

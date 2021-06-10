@@ -906,6 +906,7 @@ namespace cuenum
 
         bool is_initialized;
         bool all_initialized;
+        bool target_level_initialized;
         // search for the lowest level which has the required partsums set
 
         do
@@ -916,6 +917,10 @@ namespace cuenum
 
             is_initialized = group.thread_rank() >= active_thread_count || buffer.are_partsums_initialized(current_level, index, target_level);
             all_initialized = group.all(is_initialized);
+
+            if (current_level == level) {
+                target_level_initialized = is_initialized;
+            }
 
             current_level -= 1;
         } while (current_level != std::numeric_limits<unsigned int>::max() && !all_initialized);
@@ -983,7 +988,7 @@ namespace cuenum
                 }
             }
 
-            if (current_level == level && active)
+            if (current_level == level && active && !target_level_initialized)
             {
                 buffer.init_enumeration(level, index);
             }

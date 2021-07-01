@@ -192,21 +192,17 @@ public:
     }
 };
 
-constexpr unsigned int warp_size = 32;
-
 template<unsigned int block_size>
 class ThreadGroupWarp {
 
-    cooperative_groups::thread_block_tile<warp_size> cg;
-    PrefixCounter<cooperative_groups::thread_block_tile<warp_size>, block_size> prefix_counter;
+    cooperative_groups::thread_block_tile<32> cg;
+    PrefixCounter<cooperative_groups::thread_block_tile<32>, block_size> prefix_counter;
 
 public:
 
     __device__ ThreadGroupWarp(cooperative_groups::thread_block block_group) 
         : cg(cooperative_groups::tiled_partition<32>(block_group)), prefix_counter()
-    {
-        assert(warp_size == ::warpSize);
-    }
+    {}
 
     __device__ inline void sync() {
         cg.sync();
@@ -218,17 +214,17 @@ public:
 
     __device__ __host__ inline unsigned int size() const {
 #ifdef __CUDA_ARCH__
-        assert(cg.size() == warp_size);
+        assert(cg.size() == 32);
 #endif
-        return warpSize;
+        return 32;
     }
 
     __device__ inline unsigned int group_index() const {
-        return threadIdx.x / warp_size + blockIdx.x * (blockDim.x / warp_size);
+        return threadIdx.x / 32 + blockIdx.x * (blockDim.x / 32);
     }
 
     __device__ inline unsigned int group_index_in_block() const {
-        return threadIdx.x / warp_size;
+        return threadIdx.x / 32;
     }
 
     __device__ __host__ constexpr inline unsigned int group_count(unsigned int block_count) const {
@@ -240,8 +236,7 @@ public:
         return prefix_counter.prefix_count(cg, predicate, total_len);
     }
 
-    __device__ inline unsigned int count(bool predicate) 
-    {
+    __device__ inline unsigned int count(bool predicate) {
         unsigned int result = 0;
         prefix_count(predicate, result);
         return result;
@@ -256,16 +251,6 @@ public:
     __device__ inline T shuffle(T value, unsigned int src)
     {
         return cg.shfl(value, src);
-    }
-
-    __device__ inline uint32_t reduce_or(uint32_t value)
-    {
-        // requires CC >= 8.x    return __reduce_or_sync(0xffffffff, value);
-        uint32_t result = value;
-        for (int mask = warp_size / 2; mask > 0; mask /= 2) {
-            result |= __shfl_xor_sync(0xffffffff, result, mask);
-        }
-        return result;
     }
 };
 

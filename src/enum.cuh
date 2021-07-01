@@ -182,13 +182,16 @@ namespace cuenum
                 result.x[i] = enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                                               i * max_nodes_per_level + index];
 
-                const enumf center_partsum_i = get_center_partsum(tree_level, index, offset_kk + i);
+                const enumf center_partsum_i = center_partsum()[tree_level * dimensions * max_nodes_per_level +
+                                                                (offset_kk + i) * max_nodes_per_level + index];
                 assert(!isnan(center_partsum_i));
                 result.center_partsums[i][dimensions_per_level - 1] = center_partsum_i;
             }
 
-            result.center[dimensions_per_level - 1] = get_center_partsum(tree_level, index, offset_kk + dimensions_per_level - 1);
-            result.partdist[dimensions_per_level - 1] = get_partdist(tree_level, index);
+            result.center[dimensions_per_level - 1] =
+                center_partsum()[tree_level * dimensions * max_nodes_per_level +
+                                 (offset_kk + dimensions_per_level - 1) * max_nodes_per_level + index];
+            result.partdist[dimensions_per_level - 1] = partdist()[tree_level * max_nodes_per_level + index];
             return result;
         }
 
@@ -207,11 +210,15 @@ namespace cuenum
                 enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                                 i * max_nodes_per_level + index] = value.x[i];
 
-                assert(get_center_partsum(tree_level, index, offset_kk + i) ==
+                assert(center_partsum()[tree_level * dimensions * max_nodes_per_level +
+                                        (offset_kk + i) * max_nodes_per_level + index] ==
                        value.center_partsums[i][dimensions_per_level - 1]);
             }
-            assert(get_center_partsum(tree_level, index, offset_kk + dimensions_per_level - 1) == value.center[dimensions_per_level - 1]);
-            assert(get_partdist(tree_level, index) == value.partdist[dimensions_per_level - 1]);
+            assert(center_partsum()[tree_level * dimensions * max_nodes_per_level +
+                                    (offset_kk + dimensions_per_level - 1) * max_nodes_per_level + index] ==
+                   value.center[dimensions_per_level - 1]);
+            assert(partdist()[tree_level * max_nodes_per_level + index] ==
+                   value.partdist[dimensions_per_level - 1]);
         }
 
         /**
@@ -319,14 +326,6 @@ namespace cuenum
             return parent_indices()[tree_level * max_nodes_per_level + index];
         }
 
-        __device__ __host__ inline void set_parent_index(unsigned int tree_level,
-            unsigned int index, unsigned int parent_index)
-        {
-            assert(tree_level < levels);
-            assert(index < max_nodes_per_level);
-            parent_indices()[tree_level * max_nodes_per_level + index] = parent_index;
-        }
-
         __device__ __host__ inline enumf get_partdist(unsigned int tree_level, unsigned int index)
         {
             assert(tree_level < levels);
@@ -375,7 +374,7 @@ namespace cuenum
         }
 
         /**
-            * Removes all nodes this functions was called for with keep_this_thread_task = false from the tree.
+            * Removes all nodes this functions was called for with keep_this_thread_task=false from the tree.
             *
             * To allow an efficient implementation, requires that old_index == node_count -
             * active_thread_count + cooperative_group.thread_rank(), i.e. all threads in the group have to
@@ -392,7 +391,7 @@ namespace cuenum
             assert(active_thread_count <= open_node_count()[tree_level]);
             assert(old_index ==
                    open_node_count()[tree_level] - active_thread_count + group.thread_rank());
-            // assert(tree_level + 1 == levels || open_node_count()[tree_level + 1] == 0);
+            assert(tree_level + 1 == levels || open_node_count()[tree_level + 1] == 0);
 
             unsigned int kept_tasks = 0;
             const bool is_active =
@@ -420,7 +419,8 @@ namespace cuenum
                 }
                 for (unsigned int i = 0; i < dimensions; ++i)
                 {
-                    center_partsum_tmp[i] = get_center_partsum(tree_level, old_index, i);
+                    center_partsum_tmp[i] = center_partsum()[tree_level * dimensions * max_nodes_per_level +
+                                                             i * max_nodes_per_level + old_index];
                 }
             }
 
@@ -439,7 +439,8 @@ namespace cuenum
                 }
                 for (unsigned int i = 0; i < dimensions; ++i)
                 {
-                    set_center_partsum(tree_level, new_index, i, center_partsum_tmp[i]);
+                    center_partsum()[tree_level * dimensions * max_nodes_per_level + i * max_nodes_per_level +
+                                     new_index] = center_partsum_tmp[i];
                 }
             }
 
@@ -705,7 +706,7 @@ namespace cuenum
         }
 
         /**
-            * Removes all nodes among the last group.size() nodes on the current level whose subtrees have only nodes
+            * Removes all nodes among the last group.size() nodes on the given level whose subtrees have nodes
             * with partdist exceeding the radius limit. Be careful as the buffer can still have nodes
             * referencing such a done node as a parent node, since the enumeration data is updated when
             * children are generated, not when children are fully processed.
@@ -724,69 +725,7 @@ namespace cuenum
 
             group.sync();
 
-            assert(level + 1 == levels || buffer.get_node_count(level + 1) == 0);
             buffer.filter_nodes(group, level, index, !is_done, active_thread_count);
-        }
-
-        /**
-         * Removes all nodes among the last group.size() nodes on the current level whose subtrees have only
-         * nodes with partdist exceeding the radius limit and that are not referenced from nodes in the children
-         * level. If you know that there are no nodes in the children level, prefer using remove_done_nodes().
-         */
-        template <typename SyncGroup>
-        __device__ __host__ inline void remove_done_unreferenced_nodes(
-            SyncGroup& group) 
-        {
-            assert(level != levels - 1);
-            const unsigned int node_count = buffer.get_node_count(level);
-            const unsigned int active_thread_count = min(node_count, group.size());
-            const unsigned int begin_node_index = node_count - active_thread_count;
-            const unsigned int index = begin_node_index + group.thread_rank();
-            const unsigned int children_count = buffer.get_node_count(level + 1);
-
-            uint32_t kept_nodes = 0;
-
-            for (unsigned int child_index = group.thread_rank();
-                child_index < children_count; child_index += group.size())
-            {
-                if (buffer.get_parent_index(level + 1, child_index) >= begin_node_index) {
-                    kept_nodes |= 1 << (buffer.get_parent_index(level + 1, child_index) - begin_node_index);
-                }
-            }
-
-            if (group.thread_rank() < active_thread_count)
-            {
-                const bool is_done = buffer
-                    .get_enumeration(level, index, mu.block(offset_kk(), offset_kk()), rdiag, pruning_bounds)
-                    .template is_enumeration_done<dimensions_per_level - 1>();
-
-                if (!is_done) {
-                    kept_nodes |= 1 << group.thread_rank();
-                }
-            }
-
-            kept_nodes = group.reduce_or(kept_nodes);
-
-            buffer.filter_nodes(group, level, index, (kept_nodes >> group.thread_rank()) & 1, active_thread_count);
-
-            group.sync();
-
-            const unsigned int new_node_count = buffer.get_node_count(level);
-            assert(new_node_count <= node_count);
-            assert((new_node_count == node_count) == (popcnt(kept_nodes) == active_thread_count));
-
-            for (unsigned int child_index = group.thread_rank();
-                child_index < buffer.get_node_count(level + 1); child_index += group.size())
-            {
-                if (buffer.get_parent_index(level + 1, child_index) >= begin_node_index) {
-                    const unsigned int old_relative_parent_index = buffer.get_parent_index(level + 1, child_index) - begin_node_index;
-                    assert((kept_nodes >> old_relative_parent_index) & 1 == 1);
-                    const unsigned int new_relative_parent_index = popcnt(kept_nodes & ((1 << old_relative_parent_index) - 1));
-                    buffer.set_parent_index(level + 1, child_index, new_relative_parent_index + begin_node_index);
-                    assert(new_relative_parent_index + begin_node_index < new_node_count);
-                    assert(new_relative_parent_index <= old_relative_parent_index);
-                }
-            }
         }
 
         /**
@@ -803,8 +742,6 @@ namespace cuenum
             while (true)
             {
                 generate_children(group);
-                group.sync();
-                //remove_done_unreferenced_nodes(group);
                 group.sync();
                 const unsigned int done_node_count = get_done_node_count(group);
                 group.sync();
@@ -1043,7 +980,6 @@ namespace cuenum
                 if (active)
                 {
                     partsums[i] = parent_center_partsum + calc_center_partsum_delta<levels, dimensions_per_level>(current_level, index, first_required_partsum_index + i, x, mu);
-                    assert(!isnan(partsums[i]));
                     buffer.set_center_partsum(current_level, index, first_required_partsum_index + i, partsums[i]);
                 }
                 else

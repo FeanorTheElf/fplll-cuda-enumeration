@@ -783,6 +783,25 @@ namespace cuenum
             return kept_only_because_referenced_count;
         }
 
+        template <typename SyncGroup>
+        __device__ __host__ inline unsigned int get_done_node_count(
+            SyncGroup &group)
+        {
+            const unsigned int node_count = buffer.get_node_count(level);
+            const unsigned int index = node_count - min(node_count, group.size()) + group.thread_rank();
+            const bool active = index < node_count;
+
+            bool is_done = false;
+            if (active)
+            {
+                is_done = buffer
+                              .get_enumeration(level, index, mu.block(offset_kk(), offset_kk()), rdiag, pruning_bounds)
+                              .template is_enumeration_done<dimensions_per_level - 1>();
+            }
+            return group.count(is_done);
+        }
+
+
         /**
             * Generates children from the last group.size() nodes on level and adds them to the buffer, until
             * either the children buffer is full or most of these nodes are done.
@@ -798,7 +817,7 @@ namespace cuenum
 
                 generate_children(group);
                 group.sync();
-
+                //const unsigned int kept_finished_node_count = get_done_node_count(group);
                 const unsigned int kept_finished_node_count = remove_done_unreferenced_nodes(group);
                 group.sync();
 

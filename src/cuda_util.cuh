@@ -20,10 +20,7 @@
 #include <ctime>
 #include <functional>
 #include "memory.h"
-
-#ifdef _WIN32
 #include <intrin.h>
-#endif
 
 __device__ __host__ inline unsigned int thread_id()
 {
@@ -64,10 +61,8 @@ __device__ __host__ inline void runtime_error()
 __device__ __host__ inline unsigned int popcnt(uint32_t value) {
 #ifdef __CUDA_ARCH__
 	return __popc(value);
-#elif _WIN32
-	return __popcnt(value);
 #else
-	return __builtin_popcount(value);
+	return __popcnt(value);
 #endif
 }
 

@@ -683,6 +683,28 @@ namespace cuenum
         }
 
         /**
+            * Calculates the count of nodes among the last roup.size() nodes on the given level whose subtrees
+            * have nodes not exceeding the radius limit.
+            */
+        template <typename SyncGroup>
+        __device__ __host__ inline unsigned int get_done_node_count(
+            SyncGroup &group)
+        {
+            const unsigned int node_count = buffer.get_node_count(level);
+            const unsigned int index = node_count - min(node_count, group.size()) + group.thread_rank();
+            const bool active = index < node_count;
+
+            bool is_done = false;
+            if (active)
+            {
+                is_done = buffer
+                              .get_enumeration(level, index, mu.block(offset_kk(), offset_kk()), rdiag, pruning_bounds)
+                              .template is_enumeration_done<dimensions_per_level - 1>();
+            }
+            return group.count(is_done);
+        }
+
+        /**
             * Removes all nodes among the last group.size() nodes on the current level whose subtrees have only nodes
             * with partdist exceeding the radius limit. Be careful as the buffer can still have nodes
             * referencing such a done node as a parent node, since the enumeration data is updated when
@@ -695,16 +717,10 @@ namespace cuenum
             const unsigned int node_count = buffer.get_node_count(level);
             const unsigned int active_thread_count = min(node_count, group.size());
             const unsigned int index = node_count - active_thread_count + group.thread_rank();
-            const bool active = index < node_count;
 
-            ensure_enumeration_initialized(group);
-
-            bool is_done = true;
-            if (active) {
-                is_done = buffer
-                    .get_enumeration(level, index, mu.block(offset_kk(), offset_kk()), rdiag, pruning_bounds)
-                    .template is_enumeration_done<dimensions_per_level - 1>();
-            }
+            bool is_done = buffer
+                               .get_enumeration(level, index, mu.block(offset_kk(), offset_kk()), rdiag, pruning_bounds)
+                               .template is_enumeration_done<dimensions_per_level - 1>();
 
             group.sync();
 
@@ -716,11 +732,9 @@ namespace cuenum
          * Removes all nodes among the last group.size() nodes on the current level whose subtrees have only
          * nodes with partdist exceeding the radius limit and that are not referenced from nodes in the children
          * level. If you know that there are no nodes in the children level, prefer using remove_done_nodes().
-         * 
-         * Returns the number of finished nodes that have not been deleted (as the are still referenced).
          */
         template <typename SyncGroup>
-        __device__ __host__ inline unsigned int remove_done_unreferenced_nodes(
+        __device__ __host__ inline void remove_done_unreferenced_nodes(
             SyncGroup& group) 
         {
             assert(level != levels - 1);
@@ -730,57 +744,49 @@ namespace cuenum
             const unsigned int index = begin_node_index + group.thread_rank();
             const unsigned int children_count = buffer.get_node_count(level + 1);
 
-            uint32_t kept_nodes_mask = 0;
+            uint32_t kept_nodes = 0;
 
             for (unsigned int child_index = group.thread_rank();
                 child_index < children_count; child_index += group.size())
             {
                 if (buffer.get_parent_index(level + 1, child_index) >= begin_node_index) {
-                    kept_nodes_mask |= 1 << (buffer.get_parent_index(level + 1, child_index) - begin_node_index);
+                    kept_nodes |= 1 << (buffer.get_parent_index(level + 1, child_index) - begin_node_index);
                 }
             }
 
-            bool is_node_done = true;
             if (group.thread_rank() < active_thread_count)
             {
-                is_node_done = buffer
+                const bool is_done = buffer
                     .get_enumeration(level, index, mu.block(offset_kk(), offset_kk()), rdiag, pruning_bounds)
                     .template is_enumeration_done<dimensions_per_level - 1>();
 
-                if (!is_node_done) {
-                    kept_nodes_mask |= 1 << group.thread_rank();
+                if (!is_done) {
+                    kept_nodes |= 1 << group.thread_rank();
                 }
             }
 
-            kept_nodes_mask = group.reduce_or(kept_nodes_mask);
+            kept_nodes = group.reduce_or(kept_nodes);
 
-            const bool keep_only_because_referenced = group.thread_rank() < active_thread_count && is_node_done && (kept_nodes_mask >> group.thread_rank()) & 1 == 1;
-            const unsigned int kept_only_because_referenced_count = group.count(keep_only_because_referenced);
-
-            kept_nodes_mask = group.reduce_or(kept_nodes_mask);
-
-            buffer.filter_nodes(group, level, index, (kept_nodes_mask >> group.thread_rank()) & 1, active_thread_count);
+            buffer.filter_nodes(group, level, index, (kept_nodes >> group.thread_rank()) & 1, active_thread_count);
 
             group.sync();
 
             const unsigned int new_node_count = buffer.get_node_count(level);
             assert(new_node_count <= node_count);
-            assert((new_node_count == node_count) == (popcnt(kept_nodes_mask) == active_thread_count));
+            assert((new_node_count == node_count) == (popcnt(kept_nodes) == active_thread_count));
 
             for (unsigned int child_index = group.thread_rank();
                 child_index < buffer.get_node_count(level + 1); child_index += group.size())
             {
                 if (buffer.get_parent_index(level + 1, child_index) >= begin_node_index) {
                     const unsigned int old_relative_parent_index = buffer.get_parent_index(level + 1, child_index) - begin_node_index;
-                    assert((kept_nodes_mask >> old_relative_parent_index) & 1 == 1);
-                    const unsigned int new_relative_parent_index = popcnt(kept_nodes_mask & ((1 << old_relative_parent_index) - 1));
+                    assert((kept_nodes >> old_relative_parent_index) & 1 == 1);
+                    const unsigned int new_relative_parent_index = popcnt(kept_nodes & ((1 << old_relative_parent_index) - 1));
                     buffer.set_parent_index(level + 1, child_index, new_relative_parent_index + begin_node_index);
                     assert(new_relative_parent_index + begin_node_index < new_node_count);
                     assert(new_relative_parent_index <= old_relative_parent_index);
                 }
             }
-
-            return kept_only_because_referenced_count;
         }
 
         /**
@@ -791,36 +797,33 @@ namespace cuenum
         __device__ __host__ inline void process_inner_level(
             SyncGroup &group)
         {
-            int counter = 0;
+            const unsigned begin_node_count = buffer.get_node_count(level + 1);
+            const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
+
             while (true)
             {
-                const unsigned int active_thread_count = min(buffer.get_node_count(level), group.size());
-
                 generate_children(group);
                 group.sync();
-
-                const unsigned int kept_finished_node_count = remove_done_unreferenced_nodes(group);
+                //remove_done_unreferenced_nodes(group);
+                group.sync();
+                const unsigned int done_node_count = get_done_node_count(group);
                 group.sync();
 
                 if (CUENUM_TRACE && thread_id() == 0)
                 {
                     printf("Thread 0: Worked on level %d, next level points are %d, %d nodes of current working pool (%d) are done\n",
-                           level, buffer.get_node_count(level + 1), kept_finished_node_count, active_thread_count);
+                           level, buffer.get_node_count(level + 1), done_node_count, active_thread_count);
                 }
 
                 if (buffer.get_node_count(level + 1) >= opts.max_children_buffer_size)
                 {
                     break;
                 }
-                else if (kept_finished_node_count >= active_thread_count * (1 - opts.min_active_parents_percentage))
+                else if (done_node_count >= active_thread_count * (1 - opts.min_active_parents_percentage))
                 {
                     break;
                 }
                 group.sync();
-
-                if (++counter > 1000) {
-                    printf("%d, %d\n", kept_finished_node_count, active_thread_count);
-                }
             }
         }
 

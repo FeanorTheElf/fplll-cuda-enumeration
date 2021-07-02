@@ -472,7 +472,7 @@ namespace cuenum
     ProcessLeafCallback<eval_sol_fn, levels, dimensions_per_level, max_nodes_per_level>::operator()(
         const enumi *x, enumf squared_norm)
     {
-        if (squared_norm == 0)
+        if (squared_norm == 0.)
         {
             return;
         }

@@ -202,9 +202,12 @@ void test_perf()
                 mu[i * mudim + j] = lattice_mu[i][j];
             }
             rdiag[i] = lattice_rdiag[i];
+            pruning[i] = 1.;
         }
     };
-    std::function<extenum_cb_process_sol> process_sol = [](double norm_square, double *x) -> double { return norm_square; };
+    std::function<extenum_cb_process_sol> process_sol = [total_dim](double norm_square, double *x) -> double {
+        return norm_square; 
+    };
     fplll_cuda_enum(total_dim, maxdist, set_config, process_sol, nullptr, false, false);
 }
 

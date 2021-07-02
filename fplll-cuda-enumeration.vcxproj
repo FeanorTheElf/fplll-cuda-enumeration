@@ -31,7 +31,7 @@
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="src\cpu_test.cuh" />
-    <CudaCompile Include="src\cuda_wrapper_out.cu" />
+    <CudaCompile Include="src\cuda_wrapper.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\test.cpp" />

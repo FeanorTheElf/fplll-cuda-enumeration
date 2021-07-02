@@ -271,10 +271,10 @@ namespace cuenum
                 enumeration_x()[tree_level * dimensions_per_level * max_nodes_per_level +
                                 i * max_nodes_per_level + index] = NAN;
             }
-            for (unsigned int i = 0; i < (levels - tree_level) * dimensions_per_level; ++i)
+            for (unsigned int i = 1; i <= levels; ++i)
             {
-                center_partsum()[tree_level * dimensions * max_nodes_per_level +
-                                 i * max_nodes_per_level + index] = NAN;
+                set_center_partsum(tree_level, index, i * dimensions_per_level - 1, NAN);
+                assert(!are_partsums_initialized(tree_level, index, levels - i));
             }
         }
 

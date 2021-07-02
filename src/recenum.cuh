@@ -149,7 +149,7 @@ namespace cuenum
 		enumf alphak = x[kk] - center[kk];
 		enumf newdist = partdist[kk] + alphak * alphak * rdiag[kk];
 
-		profile_active_thread_percentage();
+		//profile_active_thread_percentage();
 		assert(max_paths >= 1);
 		assert(!isnan(alphak));
 		assert(partdist[kk] >= 0);
@@ -179,7 +179,7 @@ namespace cuenum
 
 		while (true)
 		{
-			profile_active_thread_percentage();
+			//profile_active_thread_percentage();
 			node_counter.inc(kk);
 			bool is_done = enumerate_recursive(callback, max_paths, node_counter, kk_marker<kk - 1>(), CoefficientIterator());
 			if (!is_done)

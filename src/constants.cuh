@@ -21,7 +21,7 @@ namespace cuenum
 
 	constexpr unsigned int enumerate_block_size = 128;
 	constexpr unsigned int enumerate_cooperative_group_size = 32;
-	constexpr unsigned int enumerate_point_stream_buffer_size = 128;
+	constexpr unsigned int enumerate_point_stream_buffer_size = 1280;
 
 	constexpr int cudaenum_max_dims_per_level = 4;
 	constexpr int cudaenum_min_startdim = 6;

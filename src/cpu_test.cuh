@@ -12,7 +12,6 @@ namespace cuenum
         typedef ThreadGroupSingleThread SyncGroup;
         typedef SubtreeEnumerationBuffer<levels, dimensions_per_level, max_nodes_per_level> SubtreeBuffer;
 
-        constexpr unsigned int block_size = 1;
         constexpr unsigned int dimensions = dimensions_per_level * levels;
         const unsigned int point_dimension = dimensions + start_point_dim;
 
@@ -44,11 +43,21 @@ namespace cuenum
 
         Matrix mu(mu_ptr, point_dimension);
         PerfCounter node_counter(&perf_counter[0]);
-        SubtreeBuffer buffer(buffer_memory.get());
+        SubtreeBuffer buffer(buffer_memory.get() + group.group_index() * SubtreeBuffer::memory_size_in_bytes);
 
         std::vector<uint64_t> result;
 
         assert(opts.initial_nodes_per_group <= group.size());
+
+        TreeLevelEnumerator<levels, dimensions_per_level, max_nodes_per_level> enumerator(
+            buffer,
+            mu,
+            rdiag,
+            node_counter,
+            pruning_bounds.get(),
+            start_points,
+            start_point_dim,
+            opts.tree_clear_opts);
 
         while (true)
         {
@@ -69,7 +78,7 @@ namespace cuenum
                 group.thread_rank() < opts.initial_nodes_per_group && start_point_index < start_point_count;
             if (active)
             {
-                const enumi *start_point = &start_points[start_point_index * start_point_dim];
+                const enumi* start_point = &start_points[start_point_index * start_point_dim];
                 const unsigned int index = buffer.add_node(0, start_point_index);
                 for (unsigned int i = 0; i < dimensions; ++i)
                 {
@@ -93,7 +102,9 @@ namespace cuenum
                     partdist += alpha * alpha * rdiag[dimensions + j];
                     assert(partdist >= 0);
                 }
-                buffer.init_enumeration(0, index, partdist, buffer.get_center_partsum(0, index, dimensions - 1));
+                buffer.set_partdist(0, index, partdist);
+                assert(start_point_index > 0 || partdist == 0);
+                buffer.init_enumeration(0, index);
             }
             if (CUENUM_TRACE && thread_id() == 0)
             {
@@ -102,9 +113,8 @@ namespace cuenum
 
             group.sync();
 
-            clear_level(group, &counter, buffer, 0, mu, rdiag,
-                        pruning_bounds.get(), evaluator, start_points, start_point_dim,
-                        opts.tree_clear_opts, node_counter);
+            clear_level<SyncGroup, FnWrapper<enumi, unsigned int, enumf, unsigned int>, levels, dimensions_per_level, max_nodes_per_level>(
+                group, evaluator, enumerator);
         }
 
         return result;

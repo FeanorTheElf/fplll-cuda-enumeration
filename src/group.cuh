@@ -180,15 +180,21 @@ public:
         return 0;
     }
 
-    __device__ inline bool all(bool predicate)
+    __device__ __host__ inline bool all(bool predicate)
     {
         return predicate;
     }
 
     template<typename T>
-    __device__ inline T shuffle(T value, unsigned int src)
+    __device__ __host__ inline T shuffle(T value, unsigned int src)
     {
         return value;
+    }
+
+    __device__ __host__ inline unsigned int count(bool predicate) {
+        unsigned int result = 0;
+        prefix_count(predicate, result);
+        return result;
     }
 };
 

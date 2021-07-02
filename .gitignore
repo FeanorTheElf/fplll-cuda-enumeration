@@ -37,3 +37,5 @@ report/*.out
 report/*.synctex.gz
 report/*.fdb_latexmk
 report/*.run.xml
+
+src/out.cu

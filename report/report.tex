@@ -175,6 +175,7 @@
 
     \label{sec:center_partsums}
     From this description we see that the major work is computing the sum $\sum_{i = k + 1}^n x_i \mu_{ki}$, often called \texttt{center} as it is the center of the interval from which to choose $x_k$. By keeping track of all the partial sums $\sum_{i=k}^n x_i \mu_{li}$ for $l < k$, the center is always available, and updating the partial sums requires $n - k$ multiplications on tree level $n - k$.
+    In the final algorithm, we will compute and store these values lazily.
 
     \subsubsection*{Decrease enumeration bound}
 
@@ -269,13 +270,13 @@
             \WHILE{node buffer is not empty}
                 \WHILE{the last $32$ nodes in the buffer on level $l$ contain more than $32 \cdot q$ unfinished ones \textbf{and} new children points fit into the buffer}
                     \STATE Assign one node $x_i$ on level $l$ to each thread $i \in \{0, ..., 31\}$
+                    \STATE If not stored yet, cooperatively compute and store required center partsums
                     \STATE Thread $i$ computes $\mathrm{children}^k(\{x_i\})$ using Alg.\ \ref{alg:children_iter} recursively (possibly resume an old computation);
                     if their number exceeds $T$, stop and update the buffer, so that Alg.\ \ref{alg:children_iter} can be resumed later
                     \IF{$l$ is the leaf level of the enumeration tree}
                         \STATE If one of these is $\neq 0$ and shorter than the current optimal solution, update it
                     \ELSE
                         \STATE Store their coefficients and norms
-                        \STATE Calculate new partial center sums with a matrix-matrix multiplication
                     \ENDIF
                 \ENDWHILE
                 \IF{children points have been added to the buffer during the above loop}
@@ -298,6 +299,7 @@
             As described above, this is the amount of enumeration tree levels that are expanded using Algorithm~\ref{alg:children_iter}, before resulting nodes are written into the buffer. The name \texttt{dimensions\_per\_level} refers not to the levels of the enumeration tree, but to the levels of the ``compacted'' enumeration tree, in which each level corresponds to $k$ levels of the original tree. From this perspective, the $\mathrm{children}^k(\{x_i\})$ are the direct children of $x_i$ in the compacted tree.
         \item[$T =$ \texttt{max\_subtree\_paths}] 
             During the calculation of $\mathrm{children}^k(\{x_i\})$ using Algorithm~\ref{alg:children_iter}, if more than $T$ leaves resp.\ root-leaf-paths of the induced small subtree are found, the thread stops, and processing on the node will continue later. This can prevent threads from waiting for the computation on a very big subtree, but different subtree structures can still cause suspended threads. 
+            A similar idea was previously used in \cite{prev_gpu_enum}, but without the other techniques applied in this work.
         \item[$q =$ \texttt{min\_active\_parents\_percentage}]
             This parameter is used to determine on which level nodes should be processed in the current step. Using the deepest level with $\geq 32$ nodes as in Algorithm~\ref{alg:warp_enum} does not work, as we store a reference to its parent for each node. Therefore, a node cannot be deleted before all its children are, otherwise, the parent reference would be invalid. 
             
@@ -316,7 +318,7 @@
     \begin{center}
         \begin{tabular}[5]{c c c c c}
             $k$ & $T$ & $q$ & $N_1$ & $N_2$ \\
-            $3$ & $50$ & $0.5$ & $8$ & $32 \cdot 256$
+            $3$ & $50$ & $0.5$ & $2$ & $32 \cdot 256$
         \end{tabular}
     \end{center}
 
@@ -366,45 +368,37 @@
     A technique that can significantly reduce the enumeration time is to work with a reduced enumeration radius, risking that no lattice point within the bound exists \cite{pruning, bkz2}. 
     If no lattice point was found by the enumeration, the basis is randomized and the enumeration is applied again. 
     This reduces the ``denseness'' of the enumeration tree, which leads to more branching during the algorithm. 
-    If the dimension of the enumerated lattice is high enough however (corresponds to the BKZ block size), the CUDA algorithm has a similar advantage as in the benchmark without pruning. 
-    The results seen in Table~\ref{tab:pruning_bench} are obtained on the same system as above, by applying the fplll BKZ implementation with block size 53 and standard fplll pruning parameters to a random, 100-dimensional, 300-bit knapsack matrix (i.e. \texttt{latticegen r 100 300 | ./fplll -a bkz -b 53}). 
-    Note that during a single BKZ tour, enumerations on different block sizes are performed (usually, the block size decreases at the end of the tour). 
-    Also, the more tours have been executed, the more reduced the lattice is, so later tours may be faster than earlier ones. 
-    An exemplary running time comparison over multiple BKZ tours on one lattice can be seen in Figure~\ref{fig:bkz_graph}. 
-    The random seed of 3 was chosen to use different lattices from Table~\ref{tab:pruning_bench}.
-
-    \begin{table}
-        \begin{tabular}{c c c c}
-            ~ & Time (min) & Executed BKZ tours & Time per tour (min) \\
-            Multithreaded & 1462, 1190 & 7, 2 & 209, 595 \\
-            CUDA & 769, 630 & 6, 4 & 128, 158
-        \end{tabular}
-        \caption{Performance of both enumerations as part of BKZ, with pruning; data for different matrices are comma-separated\label{tab:pruning_bench}}
-    \end{table}
+    Hence, the pruned enumeration tree is less suited for traversal on the GPU. 
+    Indeed, profiling our code during pruned enumeration shows that during the children enumeration, only about one quarter of all the threads in a warp are active on average.
+    As a result, it is surprising that we still achieve a speedup of more than 2x compared to the multithreaded fplll enumeration, as shown in Figure \ref{fig:perf_graph_pruning}.
 
     \begin{figure}[H]
         \begin{tikzpicture}
             \begin{axis}[
-                    %ymode=log,
-                    axis x line=center,
-                    axis y line=center,
+                    ymode=log,
                     ylabel={min},
-                    xlabel={n-th enumeration},
-                    xmax=300,
+                    xlabel={dim},
                     width=\textwidth
                 ]
                 
-                \addplot+[only marks, mark=x, red] table[x expr=\coordindex + 1, y=time] {bkz_times_cu.dat};
-                \addplot+[only marks, mark=x, blue] table[x expr=\coordindex + 1, y=time] {bkz_times_mt.dat};
-                
-                \addplot+[mark=none, red] table[x expr=\coordindex + 1, y=avg] {bkz_times_cu.dat};
-                \addplot+[mark=none, blue] table[x expr=\coordindex + 1, y=avg] {bkz_times_mt.dat};
-                
-                \node[red] at(axis description cs: 0.9, 0.15) {CUDA (avg)};
-                \node[blue] at(axis description cs: 0.2, 0.7) {Multithreaded (avg)};
+                \addplot+[mark=none, discard if not={type}{cu-med}, red] table[x=dim, y=time] {performance_pruning.dat} node[above, pos=1] {CUDA};
+                \addplot+[mark=none, discard if not={type}{mt-med}, blue] table[x=dim, y=time] {performance_pruning.dat} node[left, pos=1] {Multithreaded};
+                \addplot+[dashed, mark=none, discard if not={type}{cu-fit}, red] table[x=dim, y=time] {performance_pruning.dat} node[below, pos=.6] {};
+                \addplot+[dashed, mark=none, discard if not={type}{mt-fit}, blue] table[x=dim, y=time] {performance_pruning.dat} node[left, pos=.88] {};
+            
+                \addplot+[only marks, red, mark=x, discard if not={type}{cu-0}] table[x=dim, y=time] {performance_pruning.dat};
+                \addplot+[only marks, red, mark=x, discard if not={type}{cu-1}] table[x=dim, y=time] {performance_pruning.dat};
+                \addplot+[only marks, red, mark=x, discard if not={type}{cu-2}] table[x=dim, y=time] {performance_pruning.dat};
+                \addplot+[only marks, red, mark=x, discard if not={type}{cu-3}] table[x=dim, y=time] {performance_pruning.dat};
+
+                \addplot+[only marks, blue, mark=x, discard if not={type}{mt-0}] table[x=dim, y=time] {performance_pruning.dat};
+                \addplot+[only marks, blue, mark=x, discard if not={type}{mt-1}] table[x=dim, y=time] {performance_pruning.dat};
+                \addplot+[only marks, blue, mark=x, discard if not={type}{mt-2}] table[x=dim, y=time] {performance_pruning.dat};
+                \addplot+[only marks, blue, mark=x, discard if not={type}{mt-3}] table[x=dim, y=time] {performance_pruning.dat};
+
             \end{axis}
         \end{tikzpicture}
-        \caption{Performance of enumerations during one BKZ execution with block size 53 (on lattice from \texttt{./latticegen -randseed 3 r 100 300}); the averages are taken over five consecutive values\label{fig:bkz_graph}}
+        \caption{Performance of CUDA enumeration (red) and multithreaded enumeration (blue) with pruning\label{fig:perf_graph_pruning}, the dashed lines are exponential regression curves; some data points are clipped}
     \end{figure}
 
     \section{Source Code}

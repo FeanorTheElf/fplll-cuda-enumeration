@@ -372,6 +372,9 @@
     Indeed, profiling our code during pruned enumeration shows that during the children enumeration, only about one quarter of all the threads in a warp are active on average.
     As a result, it is surprising that we still achieve a speedup of more than 2x compared to the multithreaded fplll enumeration, as shown in Figure \ref{fig:perf_graph_pruning}.
 
+    The sharp jump in running time of almost two orders of magnitude between dimension 68 and 69 was not investigated further.
+    We believe that it is just a coincidence, possibly resulting from the choice of the heuristic pruning bounds.
+
     \begin{figure}[H]
         \begin{tikzpicture}
             \begin{axis}[
